@@ -2,7 +2,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import chat  # <-- ADD THIS IMPORT
+from app.database import engine, Base     # <-- ADD THIS
+from app.models import db_models          # <-- ADD THIS (loads the schemas)
 
+Base.metadata.create_all(bind=engine)  
 app = FastAPI(
     title="ISP Support Chatbot",
     description="AI-powered multilingual technical support for Tunisian ISP customers",
