@@ -1,0 +1,23 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# ---- Virtual Environments ----
+venv/
+env/
+ENV/
+
+# ---- Environment Variables (CRUCIAL FOR SECURITY) ----
+.env
+.env.local
+
+# ---- IDE / OS ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ---- Logs ----
+*.log
