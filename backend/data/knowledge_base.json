@@ -1,0 +1,17 @@
+[
+  {
+    "topic": "dns_configuration",
+    "tags": ["dns", "internet", "not working", "configure"],
+    "content": "To configure DNS on Windows: 1. Go to Control Panel > Network and Internet > Network and Sharing Center. 2. Click 'Change adapter settings'. 3. Right-click your connection and select 'Properties'. 4. Select 'Internet Protocol Version 4 (TCP/IPv4)' and click 'Properties'. 5. Choose 'Use the following DNS server addresses' and enter 8.8.8.8 and 8.8.4.4."
+  },
+  {
+    "topic": "router_reset",
+    "tags": ["router", "reset", "reboot", "restart"],
+    "content": "To reset the router: 1. Locate the red reset button on the back of the Oassis router. 2. Using a paperclip, press and hold the button for 10 seconds. 3. Wait for the 'SYS' light to start flashing. 4. Wait 3 minutes for the router to fully reboot and reconnect."
+  },
+  {
+    "topic": "fiber_plans",
+    "tags": ["plan", "speed", "price", "billing", "fiber", "mbps"],
+    "content": "Oassis Telecom offers three Fiber plans: 1. Fiber 100: 100 Mbps for 99 TND/month. 2. Fiber 500: 500 Mbps for 199 TND/month. 3. Fiber 1Giga: 1000 Mbps for 299 TND/month. All plans include free installation and a Wi-Fi 6 router."
+  }
+]

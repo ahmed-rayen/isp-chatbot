@@ -1,13 +1,12 @@
 # backend/app/routers/chat.py
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
-from app.models.schemas import ChatRequest
-from app.services.nvidia_client import stream_ai_response
+from app.models.schemas import ChatRequest, ChatResponse
+from app.services.nvidia_client import get_ai_response_with_tools
 from app.services.session import session_manager
 
 router = APIRouter()
 
-@router.post("/chat")
+@router.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
     try:
         # 1. Get session and add user message
@@ -15,21 +14,14 @@ async def chat_endpoint(request: ChatRequest):
         session_manager.add_message(session_id, "user", request.message)
         history = session_manager.get_history(session_id)
         
-        def stream_and_save():
-            full_reply = ""
-            for chunk in stream_ai_response(history):
-                full_reply += chunk
-                yield chunk
-            
-            # Save the full reply to session memory after streaming finishes
-            session_manager.add_message(session_id, "assistant", full_reply)
+        # 2. Get AI response (this now checks for tools automatically!)
+        ai_reply = get_ai_response_with_tools(history)
         
-        # 2. Pass the session_id in the headers!
-        return StreamingResponse(
-            stream_and_save(), 
-            media_type="text/plain",
-            headers={"X-Session-ID": session_id}  # <-- HERE IS THE FIX
-        )
+        # 3. Save the AI's response to memory
+        session_manager.add_message(session_id, "assistant", ai_reply)
+        
+        return ChatResponse(session_id=session_id, reply=ai_reply)
         
     except Exception as e:
+        print(f"Endpoint Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
