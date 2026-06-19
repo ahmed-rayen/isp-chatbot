@@ -4,7 +4,13 @@ import os
 import random
 from sqlalchemy.orm import Session
 from app.models.db_models import Ticket
-
+import numpy as np
+from openai import OpenAI
+from app.config import settings
+client = OpenAI(
+    base_url=settings.nvidia_base_url,
+    api_key=settings.nvidia_api_key
+)
 # 1. Mock database of outages
 MOCK_OUTAGES = {
     "tunis": "There is a confirmed fiber cut in Tunis. Estimated repair time: 2 hours.",
@@ -20,27 +26,61 @@ def check_outage(city: str) -> str:
 # 2. Knowledge Base Setup
 KB_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "data", "knowledge_base.json")
 
+def load_knowledge_base():
+    with open(KB_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+KB_DATA = load_knowledge_base()
+
+# 2. Generate Embeddings for the KB on startup
+def get_embedding(text: str) -> list:
+    response = client.embeddings.create(
+        model="baai/bge-m3", # NVIDIA's free multilingual embedding model
+        input=text,
+        encoding_format="float"
+    )
+    return response.data[0].embedding
+
+# Pre-compute vectors for all KB items (so we don't call the API every time)
+print(" Generating KB Embeddings...")
+KB_EMBEDDINGS = []
+for item in KB_DATA:
+    # We embed the topic, tags, and content together for best semantic matching
+    text_to_embed = f"{item['topic']} {' '.join(item['tags'])} {item['content']}"
+    vector = get_embedding(text_to_embed)
+    KB_EMBEDDINGS.append(vector)
+print("KB Embeddings Ready!")
+
+def cosine_similarity(vec1, vec2):
+    """Calculates how similar two vectors are (1.0 = identical, 0.0 = unrelated)"""
+    return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
+
 def search_knowledge_base(query: str) -> str:
-    """Searches the knowledge base for information matching the query."""
+    """Semantic search using Vector Embeddings."""
     try:
-        with open(KB_PATH, "r", encoding="utf-8") as f:
-            knowledge = json.load(f)
+        # 1. Get the vector for the user's query
+        query_vector = get_embedding(query)
         
-        query_words = query.lower().split()
-        results = []
+        # 2. Compare query vector against all KB vectors
+        scores = []
+        for i, kb_vector in enumerate(KB_EMBEDDINGS):
+            score = cosine_similarity(query_vector, kb_vector)
+            scores.append((i, score))
+            
+        # 3. Sort by highest score
+        scores.sort(key=lambda x: x[1], reverse=True)
         
-        for item in knowledge:
-            searchable_text = (item["topic"] + " " + " ".join(item["tags"]) + " " + item["content"]).lower()
-            if any(word in searchable_text for word in query_words):
-                results.append(item["content"])
+        # 4. Get the best match (if score is above 0.5, otherwise it's unrelated)
+        best_match_index, best_score = scores[0]
         
-        if results:
-            return "\n\n".join(results)
+        if best_score > 0.5: # Threshold for relevance
+            print(f"Semantic Match Found! (Score: {best_score:.2f})")
+            return KB_DATA[best_match_index]["content"]
         else:
             return "No information found in the knowledge base for this query."
             
     except Exception as e:
-        return f"Error reading knowledge base: {str(e)}"
+        return f"Error during semantic search: {str(e)}"
 
 # 3. Database Ticket Creation
 def create_ticket(db: Session, session_id: str, user_id: str, issue_summary: str) -> str:

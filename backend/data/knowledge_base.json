@@ -1,17 +1,37 @@
 [
   {
-    "topic": "dns_configuration",
-    "tags": ["dns", "internet", "not working", "configure"],
-    "content": "To configure DNS on Windows: 1. Go to Control Panel > Network and Internet > Network and Sharing Center. 2. Click 'Change adapter settings'. 3. Right-click your connection and select 'Properties'. 4. Select 'Internet Protocol Version 4 (TCP/IPv4)' and click 'Properties'. 5. Choose 'Use the following DNS server addresses' and enter 8.8.8.8 and 8.8.4.4."
-  },
-  {
     "topic": "router_reset",
-    "tags": ["router", "reset", "reboot", "restart"],
-    "content": "To reset the router: 1. Locate the red reset button on the back of the Oassis router. 2. Using a paperclip, press and hold the button for 10 seconds. 3. Wait for the 'SYS' light to start flashing. 4. Wait 3 minutes for the router to fully reboot and reconnect."
+    "tags": ["router", "reset", "reboot", "restart", "not working", "slow"],
+    "content": "How to properly reset your Oassis Router:\n1. Locate the red reset button inside the pinhole on the back.\n2. Use a paperclip to press and hold it for 10 seconds.\n3. Release when the 'SYS' light turns red.\n4. Wait 3 minutes for the router to fully boot. Do not unplug the power during this time."
   },
   {
-    "topic": "fiber_plans",
-    "tags": ["plan", "speed", "price", "billing", "fiber", "mbps"],
-    "content": "Oassis Telecom offers three Fiber plans: 1. Fiber 100: 100 Mbps for 99 TND/month. 2. Fiber 500: 500 Mbps for 199 TND/month. 3. Fiber 1Giga: 1000 Mbps for 299 TND/month. All plans include free installation and a Wi-Fi 6 router."
+    "topic": "router_lights_guide",
+    "tags": ["lights", "led", "sys", "pon", "los", "red light", "green light"],
+    "content": "Router Light Status Guide:\n- PON (Green): Good. Fiber connection is established.\n- PON (Blinking Green): Trying to connect. Wait 2 minutes.\n- LOS (Red): Critical. Fiber cable is disconnected or broken. Check the thin green/white cable. Do not bend it sharply.\n- SYS (Green): System operating normally.\n- WLAN (Green): Wi-Fi is active."
+  },
+  {
+    "topic": "dns_configuration",
+    "tags": ["dns", "internet", "not working", "configure", "windows", "mac"],
+    "content": "To configure DNS on Windows:\n1. Control Panel > Network and Internet > Network and Sharing Center.\n2. Click 'Change adapter settings'.\n3. Right-click connection -> 'Properties'.\n4. Select 'Internet Protocol Version 4 (TCP/IPv4)' -> 'Properties'.\n5. Choose 'Use the following DNS server addresses': Primary 8.8.8.8, Secondary 8.8.4.4."
+  },
+  {
+    "topic": "wifi_optimization",
+    "tags": ["wifi", "wi-fi", "slow", "signal", "weak", "drops", "disconnect"],
+    "content": "Wi-Fi Optimization Tips:\n1. Placement: Keep the router in an open, elevated area (not on the floor or inside a cabinet).\n2. Interference: Keep away from microwaves, cordless phones, and large metal objects.\n3. Band: Connect heavy devices (TVs, PCs) to the 5GHz network. Use 2.4GHz for smart home devices.\n4. Channel: Use the Oassis app to scan for the least congested Wi-Fi channel."
+  },
+  {
+    "topic": "fiber_cable_care",
+    "tags": ["fiber", "cable", "broken", "cut", "los", "red"],
+    "content": "Fiber Optic Cable Care:\nThe fiber cable is extremely fragile. Never bend it at a 90-degree angle, never staple it to the wall, and never pull it forcefully. If the cable is bent, the internet will drop entirely (LOS light will turn red). If broken, a technician must be dispatched."
+  },
+  {
+    "topic": "billing_and_plans",
+    "tags": ["plan", "speed", "price", "billing", "fiber", "mbps", "invoice", "pay"],
+    "content": "Oassis Telecom Fiber Plans & Billing:\n1. Fiber 100: 100 Mbps for 99 TND/month.\n2. Fiber 500: 500 Mbps for 199 TND/month.\n3. Fiber 1Giga: 1000 Mbps for 299 TND/month.\nAll plans include free installation, a Wi-Fi 6 router, and a static IP. Invoices are generated on the 1st of every month and can be paid via the Oassis App, e-Dinar, or bank transfer."
+  },
+  {
+    "topic": "speed_test_guide",
+    "tags": ["speed", "test", "slow", "mbps", "fast", "benchmark"],
+    "content": "How to accurately test your internet speed:\n1. Stand next to the router (to eliminate Wi-Fi interference).\n2. Connect your laptop directly to the router via an Ethernet cable.\n3. Close all background apps (torrents, updates, Netflix).\n4. Go to speedtest.net and run the test. If it shows 90%+ of your plan speed, the connection is perfect."
   }
 ]
