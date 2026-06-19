@@ -12,7 +12,6 @@ export default function ChatPage() {
   const [sessionId, setSessionId] = useState(null);
   const messagesEndRef = useRef(null);
 
-  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
@@ -21,7 +20,7 @@ export default function ChatPage() {
     const messageText = textToSend || input;
     if (!messageText.trim() || isLoading) return;
 
-    // 1. Update UI immediately with user message
+    // 1. Add user message
     const newUserMessage = { role: 'user', content: messageText };
     setMessages((prev) => [...prev, newUserMessage]);
     setInput('');
@@ -29,7 +28,7 @@ export default function ChatPage() {
 
     try {
       // 2. Call FastAPI Backend
-      const response = await fetch('http://localhost:8000/api/chat', {
+      const response = await fetch(process.env.NEXT_PUBLIC_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: sessionId, message: messageText })
@@ -37,20 +36,40 @@ export default function ChatPage() {
 
       if (!response.ok) throw new Error('Network response was not ok');
 
-      // 3. Parse the JSON response (No more streaming!)
+      // 3. Parse JSON
       const data = await response.json();
-      
-      // 4. Save the session ID from the response body
       if (data.session_id) setSessionId(data.session_id);
 
-      // 5. Add the AI's reply to the messages
-      setMessages((prev) => [...prev, { role: 'assistant', content: data.reply }]);
+      // 4. Hide loading dots, add empty bot message
+      setIsLoading(false);
+      setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
+
+      const fullText = data.reply;
+      let currentIndex = 0;
+
+      // 5. Typing Effect Logic
+      const typingInterval = setInterval(() => {
+        if (currentIndex < fullText.length) {
+          setMessages((prev) => {
+            const newMessages = [...prev];
+            // Append 2 characters at a time for a smooth, fast typing effect
+            const nextChars = fullText.substring(currentIndex, currentIndex + 2);
+            newMessages[newMessages.length - 1] = {
+              role: 'assistant',
+              content: newMessages[newMessages.length - 1].content + nextChars
+            };
+            return newMessages;
+          });
+          currentIndex += 2;
+        } else {
+          clearInterval(typingInterval); // Stop when finished
+        }
+      }, 10); // Speed of typing (10ms is fast but smooth)
 
     } catch (error) {
       console.error('Error:', error);
-      setMessages((prev) => [...prev, { role: 'assistant', content: "Sorry, I'm having trouble connecting to the server." }]);
-    } finally {
       setIsLoading(false);
+      setMessages((prev) => [...prev, { role: 'assistant', content: "Sorry, I'm having trouble connecting to the server." }]);
     }
   };
 
@@ -107,7 +126,6 @@ export default function ChatPage() {
                   {msg.content}
                 </div>
                 
-                {/* Quick Chips only on the first bot message */}
                 {index === 0 && msg.role === 'assistant' && (
                   <div className="quick-chips">
                     <div className="chip" onClick={() => handleSend('Internet not working')}>Internet not working</div>
@@ -120,7 +138,6 @@ export default function ChatPage() {
             </div>
           ))}
 
-          {/* Typing Indicator */}
           {isLoading && (
             <div className="msg">
               <div className="msg-avatar bot-avatar"><IconRobot size={13} /></div>
