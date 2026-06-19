@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { IconWifi, IconPlus, IconWifiOff, IconSpeedboat, IconRouter, IconFileInvoice, IconRobot, IconSend } from '@tabler/icons-react';
+import { IconWifi, IconPlus, IconRobot, IconSend, IconTrash, IconMessage2 } from '@tabler/icons-react';
 
 export default function ChatPage() {
   const [messages, setMessages] = useState([
@@ -10,49 +10,85 @@ export default function ChatPage() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState(null);
+  const [chatSessions, setChatSessions] = useState([]); // Sidebar chats
   const messagesEndRef = useRef(null);
+
+  const API_BASE = 'http://localhost:8000/api'; // Hardcoded for now, or use your .env
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
+  // Fetch all past chats on mount
+  useEffect(() => {
+    fetchSessions();
+  }, []);
+
+  const fetchSessions = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/sessions`);
+      const data = await res.json();
+      setChatSessions(data);
+    } catch (e) { console.error("Failed to load sessions"); }
+  };
+
+  const startNewChat = () => {
+    setSessionId(null);
+    setMessages([{ role: 'assistant', content: "Hello! I'm NetAssist, your technical support AI. How can I help you today?" }]);
+  };
+
+  const loadChat = async (id) => {
+    try {
+      const res = await fetch(`${API_BASE}/sessions/${id}/messages`);
+      const data = await res.json();
+      if (data.length > 0) {
+        setMessages(data);
+        setSessionId(id);
+      } else {
+        startNewChat();
+        setSessionId(id);
+      }
+    } catch (e) { console.error("Failed to load chat"); }
+  };
+
+  const deleteChat = async (e, id) => {
+    e.stopPropagation(); // Prevent triggering loadChat
+    try {
+      await fetch(`${API_BASE}/sessions/${id}`, { method: 'DELETE' });
+      if (sessionId === id) startNewChat();
+      fetchSessions();
+    } catch (e) { console.error("Failed to delete"); }
+  };
+
   const handleSend = async (textToSend) => {
     const messageText = textToSend || input;
     if (!messageText.trim() || isLoading) return;
 
-    // 1. Add user message
     const newUserMessage = { role: 'user', content: messageText };
     setMessages((prev) => [...prev, newUserMessage]);
     setInput('');
     setIsLoading(true);
 
     try {
-      // 2. Call FastAPI Backend
-      const response = await fetch(process.env.NEXT_PUBLIC_API_URL, {
+      const response = await fetch(`${API_BASE}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: sessionId, message: messageText })
       });
 
       if (!response.ok) throw new Error('Network response was not ok');
-
-      // 3. Parse JSON
       const data = await response.json();
       if (data.session_id) setSessionId(data.session_id);
 
-      // 4. Hide loading dots, add empty bot message
       setIsLoading(false);
       setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
 
       const fullText = data.reply;
       let currentIndex = 0;
-
-      // 5. Typing Effect Logic
       const typingInterval = setInterval(() => {
         if (currentIndex < fullText.length) {
           setMessages((prev) => {
             const newMessages = [...prev];
-            // Append 2 characters at a time for a smooth, fast typing effect
             const nextChars = fullText.substring(currentIndex, currentIndex + 2);
             newMessages[newMessages.length - 1] = {
               role: 'assistant',
@@ -62,9 +98,10 @@ export default function ChatPage() {
           });
           currentIndex += 2;
         } else {
-          clearInterval(typingInterval); // Stop when finished
+          clearInterval(typingInterval);
+          fetchSessions(); // Update sidebar with new title
         }
-      }, 10); // Speed of typing (10ms is fast but smooth)
+      }, 10);
 
     } catch (error) {
       console.error('Error:', error);
@@ -87,15 +124,33 @@ export default function ChatPage() {
           </div>
         </div>
 
-        <button className="new-chat-btn">
+        <button className="new-chat-btn" onClick={startNewChat}>
           <IconPlus size={14} /> New conversation
         </button>
 
         <div className="section-label">Recent</div>
-        <div className="chat-item active"><IconWifiOff size={13} style={{ marginRight: '6px', verticalAlign: 'middle' }} />Connection dropping</div>
-        <div className="chat-item"><IconSpeedboat size={13} style={{ marginRight: '6px', verticalAlign: 'middle' }} />Slow speeds issue</div>
-        <div className="chat-item"><IconRouter size={13} style={{ marginRight: '6px', verticalAlign: 'middle' }} />Router setup help</div>
-        <div className="chat-item"><IconFileInvoice size={13} style={{ marginRight: '6px', verticalAlign: 'middle' }} />Billing question</div>
+        
+        {/* DYNAMIC CHAT LIST */}
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          {chatSessions.map((chat) => (
+            <div 
+              key={chat.id} 
+              className={`chat-item ${sessionId === chat.id ? 'active' : ''}`}
+              onClick={() => loadChat(chat.id)}
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <IconMessage2 size={13} style={{ marginRight: '6px', flexShrink: 0 }} />
+                {chat.title}
+              </span>
+              <IconTrash 
+                size={14} 
+                style={{ marginLeft: '8px', opacity: 0.5, cursor: 'pointer', flexShrink: 0 }} 
+                onClick={(e) => deleteChat(e, chat.id)}
+              />
+            </div>
+          ))}
+        </div>
 
         <div className="sidebar-footer">
           <div className="user-row">
@@ -126,7 +181,7 @@ export default function ChatPage() {
                   {msg.content}
                 </div>
                 
-                {index === 0 && msg.role === 'assistant' && (
+                {index === 0 && msg.role === 'assistant' && sessionId === null && (
                   <div className="quick-chips">
                     <div className="chip" onClick={() => handleSend('Internet not working')}>Internet not working</div>
                     <div className="chip" onClick={() => handleSend('Slow connection')}>Slow connection</div>
