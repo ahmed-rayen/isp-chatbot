@@ -67,7 +67,19 @@ export default function ChatPage() {
     }
   };
 
-  const startNewChat = () => {
+  const startNewChat = async () => {
+    // 1. If we are in a session, summarize it first
+    if (sessionId) {
+      try {
+        const token = sessionStorage.getItem('access_token');
+        await fetch(`${API_BASE}/sessions/${sessionId}/summarize`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+      } catch (e) { console.error("Failed to summarize previous chat"); }
+    }
+
+    // 2. Clear the UI for the new chat
     setSessionId(null);
     setMessages([{ role: 'assistant', content: "Hello! I'm NetAssist, your technical support AI. How can I help you today?" }]);
   };
