@@ -4,6 +4,8 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import { IconWifi, IconPlus, IconRobot, IconSend, IconTrash, IconMessage2, IconLogout } from '@tabler/icons-react';
+import Link from 'next/link';
+import { IconTicket } from '@tabler/icons-react';
 
 export default function ChatPage() {
   const router = useRouter();
@@ -212,9 +214,11 @@ export default function ChatPage() {
           </div>
         </div>
 
-        <button className="new-chat-btn" onClick={startNewChat}>
-          <IconPlus size={14} /> New conversation
-        </button>
+        <button className="new-chat-btn" style={{ marginBottom: '10px' }}>
+ <Link href="/tickets" className="new-chat-btn" style={{ marginBottom: '10px', textDecoration: 'none' }}>
+  <IconTicket size={14} /> My Tickets
+</Link>
+</button>
 
         <div className="section-label">Recent</div>
         
