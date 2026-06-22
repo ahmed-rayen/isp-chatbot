@@ -2,13 +2,13 @@ from sqlalchemy.orm import Session
 from app.models.db_models import ChatSession, Message
 import uuid
 
-def get_or_create_session(db: Session, session_id: str = None) -> str:
+def get_or_create_session(db: Session, session_id: str, user_id: str) -> str:
     if session_id:
-        existing = db.query(ChatSession).filter(ChatSession.id == uuid.UUID(session_id)).first()
+        existing = db.query(ChatSession).filter(ChatSession.id == uuid.UUID(session_id), ChatSession.user_id == uuid.UUID(user_id)).first()
         if existing:
             return session_id
             
-    new_session = ChatSession()
+    new_session = ChatSession(user_id=uuid.UUID(user_id)) # Link to user!
     db.add(new_session)
     db.commit()
     return str(new_session.id)

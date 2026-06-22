@@ -1,12 +1,12 @@
-# backend/app/routers/chat.py
 from fastapi import APIRouter, HTTPException, Depends, Request
 from sqlalchemy.orm import Session
 from app.models.schemas import ChatRequest, ChatResponse
 from app.services.nvidia_client import get_ai_response_with_tools
 from app.services.session import get_or_create_session, add_message, get_history, get_full_history
 from app.database import get_db
-from app.models.db_models import ChatSession, Message, Ticket
+from app.models.db_models import ChatSession, Message, Ticket, User
 from app.limiter import limiter
+from app.routers.auth import get_current_user
 import uuid
 
 router = APIRouter()
@@ -22,9 +22,15 @@ BLOCKLIST = [
     "you are now",
 ]
 
+
 @router.post("/chat", response_model=ChatResponse)
 @limiter.limit("10/minute")
-async def chat_endpoint(request: Request, payload: ChatRequest, db: Session = Depends(get_db)):
+async def chat_endpoint(
+    request: Request,
+    payload: ChatRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     try:
         user_input_lower = payload.message.lower()
         for bad_phrase in BLOCKLIST:
@@ -34,14 +40,14 @@ async def chat_endpoint(request: Request, payload: ChatRequest, db: Session = De
                     reply="I cannot process that request. How can I help you with your internet connection today?"
                 )
 
-        session_id = get_or_create_session(db, payload.session_id)
+        session_id = get_or_create_session(db, payload.session_id, str(current_user.id))
         add_message(db, session_id, "user", payload.message)
         history = get_history(db, session_id)
 
         full_transcript = get_full_history(db, session_id)
         transcript_str = "\n".join([f"{m['role']}: {m['content']}" for m in full_transcript])
 
-        ai_reply = get_ai_response_with_tools(db, session_id, history, transcript_str)
+        ai_reply = get_ai_response_with_tools(db, session_id, history, transcript_str, str(current_user.id))
 
         add_message(db, session_id, "assistant", ai_reply)
 
@@ -58,18 +64,33 @@ async def chat_endpoint(request: Request, payload: ChatRequest, db: Session = De
 
 
 @router.get("/sessions")
-def get_sessions(db: Session = Depends(get_db)):
-    sessions = db.query(ChatSession).order_by(ChatSession.created_at.desc()).all()
+def get_sessions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    sessions = (
+        db.query(ChatSession)
+        .filter(ChatSession.user_id == current_user.id)
+        .order_by(ChatSession.created_at.desc())
+        .all()
+    )
     return [{"id": str(s.id), "title": s.title} for s in sessions]
 
 
 @router.delete("/sessions/{session_id}")
-def delete_session(session_id: str, db: Session = Depends(get_db)):
+def delete_session(
+    session_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     try:
         uid = uuid.UUID(session_id)
         db.query(Ticket).filter(Ticket.session_id == uid).delete()
         db.query(Message).filter(Message.session_id == uid).delete()
-        db.query(ChatSession).filter(ChatSession.id == uid).delete()
+        db.query(ChatSession).filter(
+            ChatSession.id == uid,
+            ChatSession.user_id == current_user.id,
+        ).delete()
         db.commit()
         return {"status": "deleted"}
     except Exception as e:
@@ -78,8 +99,22 @@ def delete_session(session_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/sessions/{session_id}/messages")
-def get_session_messages(session_id: str, db: Session = Depends(get_db)):
-    msgs = db.query(Message).filter(
-        Message.session_id == uuid.UUID(session_id)
-    ).order_by(Message.created_at).all()
+def get_session_messages(
+    session_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    session = db.query(ChatSession).filter(
+        ChatSession.id == uuid.UUID(session_id),
+        ChatSession.user_id == current_user.id,
+    ).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    msgs = (
+        db.query(Message)
+        .filter(Message.session_id == uuid.UUID(session_id))
+        .order_by(Message.created_at)
+        .all()
+    )
     return [{"role": m.role, "content": m.content} for m in msgs]
