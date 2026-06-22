@@ -8,7 +8,7 @@ from datetime import date, timedelta
 from app.models.db_models import Ticket, User, Outage, Technician, TechnicianVisit
 from openai import OpenAI
 from app.config import settings
-
+import uuid 
 client = OpenAI(
     base_url=settings.nvidia_base_url,
     api_key=settings.nvidia_api_key
@@ -120,16 +120,17 @@ def run_remote_diagnostics(session_id: str) -> str:
 # ---------------------------------------------------------------------------
 
 def create_ticket(db: Session, session_id: str, user_id: str, issue_summary: str, transcript: str = "") -> str:
-    """Creates a standard support ticket in PostgreSQL."""
+    """Creates a support ticket in the database."""
     ticket_id = f"TKT-{random.randint(10000, 99999)}"
-    db.add(Ticket(
+    new_ticket = Ticket(
         id=ticket_id,
-        session_id=session_id,
-        user_id=user_id,
+        session_id=uuid.UUID(session_id),  # <-- FIX: Cast to UUID
+        user_id=uuid.UUID(user_id),        # <-- FIX: Cast to UUID
         issue_summary=issue_summary,
         transcript=transcript,
         status="open"
-    ))
+    )
+    db.add(new_ticket)
     db.commit()
     return f"Ticket {ticket_id} created successfully. A human agent will review the case."
 
@@ -138,73 +139,57 @@ def create_ticket(db: Session, session_id: str, user_id: str, issue_summary: str
 # 5. Technician Scheduling
 # ---------------------------------------------------------------------------
 
-def schedule_technician_visit(
-    db: Session,
-    session_id: str,
-    user_id: str,
-    issue_type: str,
-    preferred_date: str,
-    time_slot: str
-) -> str:
-    """Creates a ticket and schedules a technician visit for physical issues."""
-
-    # Parse preferred date
-    try:
-        if "tomorrow" in preferred_date.lower():
-            visit_date = date.today() + timedelta(days=1)
-        else:
-            visit_date = date.fromisoformat(preferred_date)
-    except Exception:
-        visit_date = date.today() + timedelta(days=1)
-
-    # Create ticket first
+def schedule_technician_visit(db: Session, session_id: str, user_id: str, issue_type: str, preferred_date: str, time_slot: str) -> str:
+    """Schedules a technician visit for physical issues."""
     ticket_id = f"TKT-{random.randint(10000, 99999)}"
-    db.add(Ticket(
+    new_ticket = Ticket(
         id=ticket_id,
-        session_id=session_id,
-        user_id=user_id,
+        session_id=uuid.UUID(session_id),  # <-- FIX: Cast to UUID
+        user_id=uuid.UUID(user_id),        # <-- FIX: Cast to UUID
         issue_summary=f"Technician Visit Required: {issue_type}",
         transcript="",
         status="visit_scheduled"
-    ))
+    )
+    db.add(new_ticket)
     db.flush()
 
-    # Find least-busy technician for that date
-    visit_counts = dict(
-        db.query(TechnicianVisit.technician_id, func.count(TechnicianVisit.id))
-        .filter(TechnicianVisit.scheduled_date == visit_date)
-        .group_by(TechnicianVisit.technician_id)
-        .all()
-    )
-    all_techs = db.query(Technician).all()
-    if not all_techs:
-        db.rollback()
-        return "Sorry, no technicians are currently available."
+    try:
+        if "tomorrow" in preferred_date.lower() or "after tomorrow" in preferred_date.lower():
+            days_add = 2 if "after" in preferred_date.lower() else 1
+            visit_date = date.today() + timedelta(days=days_add)
+        else:
+            visit_date = date.fromisoformat(preferred_date)
+    except:
+        visit_date = date.today() + timedelta(days=1)
 
-    chosen_tech = min(
-        all_techs,
-        key=lambda t: visit_counts.get(t.id, 0)
-    )
-    if visit_counts.get(chosen_tech.id, 0) >= chosen_tech.daily_capacity:
+    tech_counts = db.query(TechnicianVisit.technician_id, func.count(TechnicianVisit.id))\
+        .filter(TechnicianVisit.scheduled_date == visit_date)\
+        .group_by(TechnicianVisit.technician_id).all()
+    
+    all_techs = db.query(Technician).all()
+    chosen_tech = all_techs[0] if all_techs else None
+    for tech, count in tech_counts:
+        for t in all_techs:
+            if t.id == tech and count < t.daily_capacity:
+                chosen_tech = t
+                break
+
+    if not chosen_tech:
         db.rollback()
         return "Sorry, all technicians are fully booked for that date."
 
-    db.add(TechnicianVisit(
+    new_visit = TechnicianVisit(
         ticket_id=ticket_id,
-        user_id=user_id,
+        user_id=uuid.UUID(user_id),        # <-- FIX: Cast to UUID
         technician_id=chosen_tech.id,
         scheduled_date=visit_date,
         time_slot=time_slot,
         status="scheduled"
-    ))
+    )
+    db.add(new_visit)
     db.commit()
 
-    return (
-        f"Success! Ticket {ticket_id} created. "
-        f"Technician {chosen_tech.name} is scheduled for "
-        f"{visit_date.strftime('%A, %B %d')} ({time_slot}). "
-        f"Reference: {ticket_id}."
-    )
+    return f"Success! Ticket {ticket_id} created. A technician named {chosen_tech.name} is scheduled for {visit_date.strftime('%A, %B %d')} during the {time_slot}. Reference ID: {ticket_id}."
 
 
 # ---------------------------------------------------------------------------

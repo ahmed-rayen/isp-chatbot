@@ -1,4 +1,3 @@
-# backend/app/main.py
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -9,6 +8,7 @@ from app.routers import chat, auth          # Added auth
 from app.database import engine, Base, SessionLocal  # Added SessionLocal
 from app.models import db_models
 from app.services.auth import hash_password # Added hash_password
+from app.routers import chat, auth, tickets 
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -59,7 +59,7 @@ app.add_middleware(
 # Register routers
 app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
 app.include_router(chat.router, prefix="/api", tags=["Chat"])
-
+app.include_router(tickets.router, prefix="/api", tags=["Tickets"])
 @app.get("/")
 def root():
     return {"status": "ok", "service": "ISP Chatbot API"}
