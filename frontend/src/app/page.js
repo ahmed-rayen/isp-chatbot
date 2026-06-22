@@ -1,5 +1,5 @@
 'use client';
-
+import ReactMarkdown from 'react-markdown';
 import { useState, useRef, useEffect } from 'react';
 import { IconWifi, IconPlus, IconRobot, IconSend, IconTrash, IconMessage2 } from '@tabler/icons-react';
 
@@ -76,32 +76,44 @@ export default function ChatPage() {
         body: JSON.stringify({ session_id: sessionId, message: messageText })
       });
 
-      if (!response.ok) throw new Error('Network response was not ok');
+     if (response.status === 429) {
+  setMessages(prev => [...prev, {
+    role: "assistant",
+    content: "Too many messages. Please wait a moment before sending another."
+  }]);
+  return;
+}
+
+if (!response.ok) throw new Error('Network response was not ok');
       const data = await response.json();
       if (data.session_id) setSessionId(data.session_id);
 
       setIsLoading(false);
       setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
-
       const fullText = data.reply;
       let currentIndex = 0;
+      let typedText = ""; // Use a local variable to avoid React state race conditions
+      
       const typingInterval = setInterval(() => {
         if (currentIndex < fullText.length) {
+          // Build the string locally first
+          typedText += fullText.substring(currentIndex, currentIndex + 2);
+          currentIndex += 2;
+          
+          // Then push it to React state
           setMessages((prev) => {
             const newMessages = [...prev];
-            const nextChars = fullText.substring(currentIndex, currentIndex + 2);
             newMessages[newMessages.length - 1] = {
               role: 'assistant',
-              content: newMessages[newMessages.length - 1].content + nextChars
+              content: typedText
             };
             return newMessages;
           });
-          currentIndex += 2;
         } else {
           clearInterval(typingInterval);
           fetchSessions(); // Update sidebar with new title
         }
-      }, 10);
+      }, 15); // 15ms is smooth and safe // Slightly slower (15ms) to let React render properly
 
     } catch (error) {
       console.error('Error:', error);
@@ -172,14 +184,19 @@ export default function ChatPage() {
 
         <div className="messages">
           {messages.map((msg, index) => (
+            
             <div key={index} className={`msg ${msg.role === 'user' ? 'user' : ''}`}>
               <div className={`msg-avatar ${msg.role === 'user' ? 'user-avatar-msg' : 'bot-avatar'}`}>
                 {msg.role === 'user' ? 'AH' : <IconRobot size={13} />}
               </div>
               <div>
-                <div className={`bubble ${msg.role === 'user' ? 'user-bubble' : 'bot-bubble'}`}>
-                  {msg.content}
-                </div>
+               <div className={`bubble ${msg.role === 'user' ? 'user-bubble' : 'bot-bubble'}`}>
+  {msg.role === 'user' ? (
+    msg.content
+  ) : (
+    <ReactMarkdown>{msg.content}</ReactMarkdown>
+  )}
+</div>
                 
                 {index === 0 && msg.role === 'assistant' && sessionId === null && (
                   <div className="quick-chips">

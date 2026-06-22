@@ -24,5 +24,6 @@ class Ticket(Base):
     session_id = Column(UUID(as_uuid=True), ForeignKey("chat_sessions.id"), nullable=False)
     user_id = Column(String(50), default="guest")
     issue_summary = Column(Text, nullable=False)
+    transcript = Column(Text, default="")  # NEW: Saves the full chat!
     status = Column(String(20), default="open")
     created_at = Column(DateTime, default=datetime.utcnow)

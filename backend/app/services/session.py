@@ -23,3 +23,8 @@ def get_history(db: Session, session_id: str) -> list:
     # Sliding window: only keep the last 6 messages for the AI prompt
     recent_msgs = msgs[-6:]
     return [{"role": m.role, "content": m.content} for m in recent_msgs]
+
+def get_full_history(db: Session, session_id: str) -> list:
+    """Gets ALL messages in a session (not just the last 6) for the ticket transcript."""
+    msgs = db.query(Message).filter(Message.session_id == uuid.UUID(session_id)).order_by(Message.created_at).all()
+    return [{"role": m.role, "content": m.content} for m in msgs]

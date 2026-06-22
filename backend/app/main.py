@@ -1,32 +1,29 @@
 # backend/app/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import chat  # <-- ADD THIS IMPORT
-from app.database import engine, Base     # <-- ADD THIS
-from app.models import db_models          # <-- ADD THIS (loads the schemas)
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from app.limiter import limiter
+from app.routers import chat
+from app.database import engine, Base
+from app.models import db_models
 
-Base.metadata.create_all(bind=engine)  
-app = FastAPI(
-    title="ISP Support Chatbot",
-    description="AI-powered multilingual technical support for Tunisian ISP customers",
-    version="0.1.0",
-)
+Base.metadata.create_all(bind=engine)
+
+app = FastAPI(title="ISP Support Chatbot")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Register the router
-app.include_router(chat.router, prefix="/api", tags=["Chat"])  # <-- ADD THIS
+app.include_router(chat.router, prefix="/api", tags=["Chat"])
 
 @app.get("/")
 def root():
     return {"status": "ok", "service": "ISP Chatbot API"}
-
-@app.get("/health")
-def health():
-    return {"status": "healthy"}

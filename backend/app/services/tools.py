@@ -168,3 +168,112 @@ def execute_tool(db: Session, session_id: str, tool_name: str, arguments: dict) 
         return search_knowledge_base(**arguments)
     else:
         return "Tool not found."
+    
+def get_account_status(user_id: str) -> str:
+    """Mocks a lookup of the user's specific account and billing plan."""
+    # In reality, this hits your ISP billing database
+    if user_id == "guest" or not user_id:
+        return "User not authenticated. Please ask the user for their Client ID."
+    
+    # Mock data for a specific user
+    mock_accounts = {
+        "4821": {"name": "Ahmed H.", "plan": "Fiber 500", "speed": "500 Mbps", "balance": "0 TND", "due_date": "2024-06-01"},
+        "1234": {"name": "Sara B.", "plan": "Fiber 100", "speed": "100 Mbps", "balance": "99 TND", "due_date": "2024-05-15"}
+    }
+    
+    account = mock_accounts.get(str(user_id))
+    if account:
+        return f"Account Found: {account['name']}. Current Plan: {account['plan']} ({account['speed']}). Balance Due: {account['balance']} by {account['due_date']}."
+    return f"No account found for ID {user_id}."
+
+def run_remote_diagnostics(session_id: str) -> str:
+    """Simulates checking the fiber line signal to the user's home."""
+    # In reality, this hits your network management system (NMS)
+    import random
+    signal_dbm = random.randint(-25, -15) # -15 to -25 is good signal
+    if signal_dbm > -20:
+        return f"Diagnostic complete. Fiber signal is excellent ({signal_dbm} dBm). The physical line to the home is intact. The issue is likely with the user's router or Wi-Fi."
+    else:
+        return f"Diagnostic complete. Fiber signal is weak ({signal_dbm} dBm). There may be a physical issue with the fiber cable outside the home. Recommend dispatching a technician."
+
+# Update the create_ticket function to accept and save the transcript
+def create_ticket(db: Session, session_id: str, user_id: str, issue_summary: str, transcript: str = "") -> str:
+    """Creates a support ticket in the database with the full chat transcript."""
+    ticket_id = f"TKT-{random.randint(10000, 99999)}"
+    
+    new_ticket = Ticket(
+        id=ticket_id,
+        session_id=session_id,
+        user_id=user_id,
+        issue_summary=issue_summary,
+        transcript=transcript, # Save the transcript!
+        status="open"
+    )
+    db.add(new_ticket)
+    db.commit()
+    
+    return f"Ticket {ticket_id} created successfully. A human agent will review the case and call the user back."
+
+# Update TOOL_DEFINITIONS to include the new tools...
+TOOL_DEFINITIONS = [
+    # ... (keep check_outage and search_knowledge_base) ...
+    {
+        "type": "function",
+        "function": {
+            "name": "create_ticket",
+            "description": "Create a support ticket if the issue cannot be resolved automatically. Use this if the user explicitly asks to escalate, speak to a human, or if a physical issue is detected.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string", "description": "The ID of the user. If unknown, use 'guest'."},
+                    "issue_summary": {"type": "string", "description": "A brief summary of the technical issue."},
+                    "transcript": {"type": "string", "description": "The full conversation history to attach to the ticket."}
+                },
+                "required": ["user_id", "issue_summary"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_account_status",
+            "description": "Look up a user's specific account details, current internet plan, and billing balance. Use this instead of the knowledge base if a user asks 'What plan do I have?' or 'What is my balance?'.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string", "description": "The client ID of the user."}
+                },
+                "required": ["user_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "run_remote_diagnostics",
+            "description": "Run a remote signal test on the fiber line connecting to the user's home. Use this if the user has no internet at all, or if you suspect a physical cable issue.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        }
+    }
+]
+
+# Update execute_tool to route the new tools...
+def execute_tool(db: Session, session_id: str, tool_name: str, arguments: dict) -> str:
+    if tool_name == "check_outage":
+        return check_outage(**arguments)
+    elif tool_name == "create_ticket":
+        # We need to fetch the transcript from the DB and pass it here.
+        # For now, we pass an empty string, we'll update the router to fetch it.
+        return create_ticket(db=db, session_id=session_id, transcript=arguments.get("transcript", ""), **{k:v for k,v in arguments.items() if k != "transcript"})
+    elif tool_name == "search_knowledge_base":
+        return search_knowledge_base(**arguments)
+    elif tool_name == "get_account_status":
+        return get_account_status(**arguments)
+    elif tool_name == "run_remote_diagnostics":
+        return run_remote_diagnostics(session_id=session_id)
+    else:
+        return "Tool not found."

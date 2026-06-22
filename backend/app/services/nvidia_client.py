@@ -11,11 +11,15 @@ client = OpenAI(
     api_key=settings.nvidia_api_key
 )
 
-def get_ai_response_with_tools(db: Session, session_id: str, chat_history: list):
+def get_ai_response_with_tools(db: Session, session_id: str, chat_history: list, transcript_str: str = ""):
     recent_history = chat_history[-6:]
     messages = [{"role": "system", "content": SYSTEM_PROMPT}] + recent_history
 
-    # 1. First call to AI
+    # If the AI decides to create a ticket, we inject the transcript into its tool arguments
+    # We do this by adding a hidden system message
+    if transcript_str:
+        messages.append({"role": "system", "content": f"If you decide to use the create_ticket tool, use the following text as the 'transcript' argument:\n{transcript_str}"})
+
     response = client.chat.completions.create(
         model=settings.nvidia_model,
         messages=messages,
@@ -23,7 +27,6 @@ def get_ai_response_with_tools(db: Session, session_id: str, chat_history: list)
         max_tokens=512,
         tools=TOOL_DEFINITIONS
     )
-
     message = response.choices[0].message
 
     # 2. Check if AI wants to call a tool
