@@ -1,35 +1,70 @@
 'use client';
-import ReactMarkdown from 'react-markdown';
+
 import { useState, useRef, useEffect } from 'react';
-import { IconWifi, IconPlus, IconRobot, IconSend, IconTrash, IconMessage2 } from '@tabler/icons-react';
+import { useRouter } from 'next/navigation';
+import ReactMarkdown from 'react-markdown';
+import { IconWifi, IconPlus, IconRobot, IconSend, IconTrash, IconMessage2, IconLogout } from '@tabler/icons-react';
 
 export default function ChatPage() {
+  const router = useRouter();
   const [messages, setMessages] = useState([
     { role: 'assistant', content: "Hello! I'm NetAssist, your technical support AI. How can I help you today?" }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState(null);
-  const [chatSessions, setChatSessions] = useState([]); // Sidebar chats
+  const [chatSessions, setChatSessions] = useState([]);
+  
+  // User states
+  const [userName, setUserName] = useState('');
+  const [userAccount, setUserAccount] = useState('');
+  
   const messagesEndRef = useRef(null);
 
-  const API_BASE = 'http://localhost:8000/api'; // Hardcoded for now, or use your .env
+  // Fallback to localhost if env var is missing
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
-  // Fetch all past chats on mount
+  // 1. Auth Check & Fetch Sessions on mount
   useEffect(() => {
-    fetchSessions();
-  }, []);
+    const token = sessionStorage.getItem('access_token');
+    if (!token) {
+      router.push('/login');
+      return;
+    }
+    
+    // Load user info for the sidebar
+    setUserName(sessionStorage.getItem('user_name') || 'User');
+    setUserAccount(sessionStorage.getItem('user_account') || '0000');
+    
+    fetchSessions(token);
+  }, [router]);
 
-  const fetchSessions = async () => {
+  // 2. Update all fetch calls to include the Bearer token
+  const fetchSessions = async (customToken = null) => {
+    const token = customToken || sessionStorage.getItem('access_token');
+    if (!token) return router.push('/login');
+    
     try {
-      const res = await fetch(`${API_BASE}/sessions`);
+      const res = await fetch(`${API_BASE}/sessions`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.status === 401) { router.push('/login'); return; }
+      
       const data = await res.json();
-      setChatSessions(data);
-    } catch (e) { console.error("Failed to load sessions"); }
+      
+      // SAFETY CHECK: Only set state if it's an array!
+      if (Array.isArray(data)) {
+        setChatSessions(data);
+      } else {
+        setChatSessions([]);
+      }
+    } catch (e) { 
+      console.error("Failed to load sessions"); 
+    }
   };
 
   const startNewChat = () => {
@@ -38,8 +73,14 @@ export default function ChatPage() {
   };
 
   const loadChat = async (id) => {
+    const token = sessionStorage.getItem('access_token');
+    if (!token) return router.push('/login');
+    
     try {
-      const res = await fetch(`${API_BASE}/sessions/${id}/messages`);
+      const res = await fetch(`${API_BASE}/sessions/${id}/messages`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.status === 401) { router.push('/login'); return; }
       const data = await res.json();
       if (data.length > 0) {
         setMessages(data);
@@ -52,9 +93,15 @@ export default function ChatPage() {
   };
 
   const deleteChat = async (e, id) => {
-    e.stopPropagation(); // Prevent triggering loadChat
+    e.stopPropagation();
+    const token = sessionStorage.getItem('access_token');
+    if (!token) return router.push('/login');
+    
     try {
-      await fetch(`${API_BASE}/sessions/${id}`, { method: 'DELETE' });
+      await fetch(`${API_BASE}/sessions/${id}`, { 
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       if (sessionId === id) startNewChat();
       fetchSessions();
     } catch (e) { console.error("Failed to delete"); }
@@ -70,37 +117,49 @@ export default function ChatPage() {
     setIsLoading(true);
 
     try {
+      const token = sessionStorage.getItem('access_token');
+      if (!token) return router.push('/login');
+
       const response = await fetch(`${API_BASE}/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
         body: JSON.stringify({ session_id: sessionId, message: messageText })
       });
 
-     if (response.status === 429) {
-  setMessages(prev => [...prev, {
-    role: "assistant",
-    content: "Too many messages. Please wait a moment before sending another."
-  }]);
-  return;
-}
+      if (response.status === 429) {
+        setMessages(prev => [...prev, {
+          role: "assistant",
+          content: "Too many messages. Please wait a moment before sending another."
+        }]);
+        setIsLoading(false);
+        return;
+      }
 
-if (!response.ok) throw new Error('Network response was not ok');
+      if (response.status === 401) { 
+        router.push('/login'); 
+        return; 
+      }
+
+      if (!response.ok) throw new Error('Network response was not ok');
+      
       const data = await response.json();
       if (data.session_id) setSessionId(data.session_id);
 
       setIsLoading(false);
       setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
+      
       const fullText = data.reply;
       let currentIndex = 0;
-      let typedText = ""; // Use a local variable to avoid React state race conditions
+      let typedText = "";
       
       const typingInterval = setInterval(() => {
         if (currentIndex < fullText.length) {
-          // Build the string locally first
           typedText += fullText.substring(currentIndex, currentIndex + 2);
           currentIndex += 2;
           
-          // Then push it to React state
           setMessages((prev) => {
             const newMessages = [...prev];
             newMessages[newMessages.length - 1] = {
@@ -111,15 +170,20 @@ if (!response.ok) throw new Error('Network response was not ok');
           });
         } else {
           clearInterval(typingInterval);
-          fetchSessions(); // Update sidebar with new title
+          fetchSessions();
         }
-      }, 15); // 15ms is smooth and safe // Slightly slower (15ms) to let React render properly
+      }, 15);
 
     } catch (error) {
       console.error('Error:', error);
       setIsLoading(false);
       setMessages((prev) => [...prev, { role: 'assistant', content: "Sorry, I'm having trouble connecting to the server." }]);
     }
+  };
+
+  const handleLogout = () => {
+    sessionStorage.clear();
+    router.push('/login');
   };
 
   return (
@@ -165,12 +229,20 @@ if (!response.ok) throw new Error('Network response was not ok');
         </div>
 
         <div className="sidebar-footer">
-          <div className="user-row">
-            <div className="avatar">AH</div>
-            <div>
-              <div className="user-name">Ahmed H.</div>
-              <div className="user-role">Client #4821</div>
+          <div className="user-row" style={{ justifyContent: 'space-between', width: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {/* Dynamic Initial */}
+              <div className="avatar">{userName.charAt(0) || 'U'}</div>
+              <div>
+                {/* Dynamic Name */}
+                <div className="user-name">{userName}</div>
+                {/* Dynamic Account Number */}
+                <div className="user-role">Client #{userAccount}</div>
+              </div>
             </div>
+            <button onClick={handleLogout} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#888', padding: '4px' }} title="Logout">
+              <IconLogout size={18} />
+            </button>
           </div>
         </div>
       </div>
@@ -184,19 +256,18 @@ if (!response.ok) throw new Error('Network response was not ok');
 
         <div className="messages">
           {messages.map((msg, index) => (
-            
             <div key={index} className={`msg ${msg.role === 'user' ? 'user' : ''}`}>
               <div className={`msg-avatar ${msg.role === 'user' ? 'user-avatar-msg' : 'bot-avatar'}`}>
-                {msg.role === 'user' ? 'AH' : <IconRobot size={13} />}
+                {msg.role === 'user' ? (userName.charAt(0) || 'U') : <IconRobot size={13} />}
               </div>
               <div>
-               <div className={`bubble ${msg.role === 'user' ? 'user-bubble' : 'bot-bubble'}`}>
-  {msg.role === 'user' ? (
-    msg.content
-  ) : (
-    <ReactMarkdown>{msg.content}</ReactMarkdown>
-  )}
-</div>
+                <div className={`bubble ${msg.role === 'user' ? 'user-bubble' : 'bot-bubble'}`}>
+                  {msg.role === 'user' ? (
+                    msg.content
+                  ) : (
+                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  )}
+                </div>
                 
                 {index === 0 && msg.role === 'assistant' && sessionId === null && (
                   <div className="quick-chips">
