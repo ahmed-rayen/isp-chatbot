@@ -1,7 +1,8 @@
-from sqlalchemy import Column, String, DateTime, Text, ForeignKey, Boolean
+# backend/app/models/db_models.py
+from sqlalchemy import Column, String, DateTime, Text, ForeignKey, Boolean, Float, Integer, Date
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 from app.database import Base
 
 class User(Base):
@@ -11,7 +12,34 @@ class User(Base):
     name = Column(String(100))
     hashed_pin = Column(String(100))
     plan = Column(String(50), default="Fiber 100")
+    balance = Column(Float, default=0.0)
+    due_date = Column(String(20), default="N/A")
+    address = Column(String(200), default="Unknown Address") # NEW
     is_active = Column(Boolean, default=True)
+
+class Outage(Base):
+    __tablename__ = "outages"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    city = Column(String(50), unique=True, index=True)
+    status = Column(String(200))
+    is_active = Column(Boolean, default=True)
+
+class Technician(Base):
+    __tablename__ = "technicians"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(50))
+    daily_capacity = Column(Integer, default=3) # Max visits per day
+
+class TechnicianVisit(Base):
+    __tablename__ = "technician_visits"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    ticket_id = Column(String(20), ForeignKey("tickets.id"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    technician_id = Column(UUID(as_uuid=True), ForeignKey("technicians.id"), nullable=False)
+    scheduled_date = Column(Date, nullable=False)
+    time_slot = Column(String(20), nullable=False) # morning, afternoon, evening
+    status = Column(String(20), default="scheduled")
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 class ChatSession(Base):
     __tablename__ = "chat_sessions"
@@ -36,4 +64,13 @@ class Ticket(Base):
     issue_summary = Column(Text, nullable=False)
     transcript = Column(Text, default="")
     status = Column(String(20), default="open")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+class SessionSummary(Base):
+    __tablename__ = "session_summaries"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    session_id = Column(UUID(as_uuid=True), ForeignKey("chat_sessions.id"), nullable=False)
+    summary = Column(Text, nullable=False)
+    status = Column(String(20), default="resolved") # resolved/unresolved
     created_at = Column(DateTime, default=datetime.utcnow)

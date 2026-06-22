@@ -20,13 +20,26 @@ if not db.query(db_models.User).first():
         account_number="4821",
         name="Ahmed H.",
         hashed_pin=hash_password("1234"),
-        plan="Fiber 500"
+        plan="Fiber 500",
+        balance=0.0,
+        due_date="2024-06-01"
     )
     db.add(mock_user)
-    db.commit()
     print("✅ Mock user created (Account: 4821, PIN: 1234)")
+if not db.query(db_models.Outage).first():
+    db.add(db_models.Outage(city="Tunis", status="Confirmed fiber cut. ETA: 2 hours.", is_active=True))
+    db.add(db_models.Outage(city="Sfax", status="Scheduled maintenance. Ends at 14:00.", is_active=True))
+    db.add(db_models.Outage(city="Sousse", status="All systems operational.", is_active=False))
+    print("✅ Mock outages seeded")
+db.commit()
 db.close()
-
+#techniciens
+if not db.query(db_models.Technician).first():
+    db.add(db_models.Technician(name="Karim", daily_capacity=3))
+    db.add(db_models.Technician(name="Sami", daily_capacity=2))
+    print("✅ Mock technicians seeded")
+db.commit()
+db.close()
 # Initialize Limiter
 limiter = Limiter(key_func=get_remote_address, default_limits=["10 per minute"])
 

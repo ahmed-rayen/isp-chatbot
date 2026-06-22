@@ -1,12 +1,13 @@
-# backend/app/routers/auth.py
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-import random # <-- ADD THIS IMPORT
-from app.database import get_db
-from app.models.db_models import User
-from app.models.auth_schemas import LoginRequest, RegisterRequest, TokenResponse, UserOut
-from app.services.auth import verify_password, hash_password, create_access_token, decode_access_token
+import random
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.orm import Session
+
+from app.database import get_db
+from app.limiter import limiter  # Rate limiter instance
+from app.models.auth_schemas import LoginRequest, RegisterRequest, TokenResponse, UserOut
+from app.models.db_models import User
+from app.services.auth import verify_password, hash_password, create_access_token, decode_access_token
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
@@ -27,15 +28,16 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     return user
 
 @router.post("/register", response_model=TokenResponse)
-def register(request: RegisterRequest, db: Session = Depends(get_db)):
+@limiter.limit("5 per minute")
+def register(request: Request, payload: RegisterRequest, db: Session = Depends(get_db)):
     # 1. Generate a unique 6-digit account number
     account_number = str(random.randint(100000, 999999))
     
     # 2. Create new user
     new_user = User(
-        name=request.name,
+        name=payload.name,
         account_number=account_number,
-        hashed_pin=hash_password(request.pin),
+        hashed_pin=hash_password(payload.pin),
         plan="Fiber 100"
     )
     db.add(new_user)
@@ -56,13 +58,15 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
     }
 
 @router.post("/login", response_model=TokenResponse)
-def login(request: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.account_number == request.account_number).first()
-    if not user or not verify_password(request.pin, user.hashed_pin):
+@limiter.limit("5 per minute")
+def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.account_number == payload.account_number).first()
+    if not user or not verify_password(payload.pin, user.hashed_pin):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid account number or PIN"
         )
+        
     access_token = create_access_token(data={"sub": str(user.id)})
     return {
         "access_token": access_token,
