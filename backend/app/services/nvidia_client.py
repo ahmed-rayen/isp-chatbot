@@ -31,7 +31,7 @@ async def get_ai_response_with_tools(db: Session, session_id: str, chat_history:
     max_retries = 2
     for attempt in range(max_retries):
         try:
-            # AWAIT the API call
+            # AWAIT the initial API call
             response = await client.chat.completions.create(
                 model=settings.nvidia_model,
                 messages=messages,
@@ -44,23 +44,27 @@ async def get_ai_response_with_tools(db: Session, session_id: str, chat_history:
 
             if message.tool_calls:
                 messages.append(message.model_dump())
+                guardrail_triggered = False  # Track if any tool call fails validation
+                
                 for tool_call in message.tool_calls:
                     tool_name = tool_call.function.name
                     tool_args = json.loads(tool_call.function.arguments)
                     
-                    # GUARDRAIL FOR SCHEDULING
+                    # --- GUARDRAIL FOR SCHEDULING ---
                     if tool_name == "schedule_technician_visit":
                         if not tool_args.get("preferred_date") or not tool_args.get("time_slot"):
                             messages.append({
                                 "role": "tool",
                                 "tool_call_id": tool_call.id,
                                 "name": tool_name,
-                                "content": "Error: Missing preferred_date or time_slot. You MUST ask the user for their preferred date and time slot (morning, afternoon, or evening) before calling this tool."
+                                "content": "Error: Missing preferred_date or time_slot. You MUST ask the user for their preferred date and time slot (morning, afternoon, or evening) before calling this tool. Do not apologize, just ask for the date and time."
                             })
-                        continue
+                            guardrail_triggered = True
+                            continue  # Skip execution of this specific invalid tool call
 
+                    # Run standard execution if guardrail didn't catch it
                     print(f"AI is calling tool: {tool_name} with args {tool_args}")
-                    tool_result = execute_tool(db, session_id, user_id, tool_name, tool_args)
+                    tool_result = execute_tool(db, session_id, user_id, tool_name, tool_args, transcript_str)
                     
                     messages.append({
                         "role": "tool",
@@ -69,7 +73,7 @@ async def get_ai_response_with_tools(db: Session, session_id: str, chat_history:
                         "content": tool_result
                     })
                 
-                # AWAIT the second API call
+                # AWAIT the final API call to respond back to the user with the tool outcomes/errors
                 final_response = await client.chat.completions.create(
                     model=settings.nvidia_model,
                     messages=messages,
@@ -83,10 +87,10 @@ async def get_ai_response_with_tools(db: Session, session_id: str, chat_history:
         except (APIConnectionError, RateLimitError, APIError) as e:
             print(f"⚠️ NVIDIA API Error (Attempt {attempt + 1}/{max_retries}): {e}")
             if attempt < max_retries - 1:
-                await asyncio.sleep(2) # Use async sleep
+                await asyncio.sleep(2)  # Secure async delay
             else:
                 return "I'm sorry, our systems are currently experiencing high traffic. Please try again in a moment."
-
+            
 async def generate_session_summary(chat_history: list):
     messages = [
         {"role": "system", "content": "You are a summarization AI. Read the conversation and output a 2-3 sentence summary. Format it EXACTLY as: 'Issue: [description]. Resolution: [description]. Status: [resolved/unresolved]. Ticket ID: [TKT-XXXXX or None]'."},

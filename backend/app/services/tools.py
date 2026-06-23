@@ -1,4 +1,5 @@
 import json
+import uuid 
 import os
 import random
 import numpy as np
@@ -8,7 +9,7 @@ from datetime import date, timedelta
 from app.models.db_models import Ticket, User, Outage, Technician, TechnicianVisit
 from openai import OpenAI
 from app.config import settings
-import uuid 
+
 client = OpenAI(
     base_url=settings.nvidia_base_url,
     api_key=settings.nvidia_api_key
@@ -124,30 +125,25 @@ def create_ticket(db: Session, session_id: str, user_id: str, issue_summary: str
     ticket_id = f"TKT-{random.randint(10000, 99999)}"
     new_ticket = Ticket(
         id=ticket_id,
-        session_id=uuid.UUID(session_id),  # <-- FIX: Cast to UUID
-        user_id=uuid.UUID(user_id),        # <-- FIX: Cast to UUID
+        session_id=uuid.UUID(session_id),
+        user_id=uuid.UUID(user_id),
         issue_summary=issue_summary,
-        transcript=transcript,
+        transcript=transcript, # ENSURE THIS IS HERE
         status="open"
     )
     db.add(new_ticket)
     db.commit()
     return f"Ticket {ticket_id} created successfully. A human agent will review the case."
 
-
-# ---------------------------------------------------------------------------
-# 5. Technician Scheduling
-# ---------------------------------------------------------------------------
-
-def schedule_technician_visit(db: Session, session_id: str, user_id: str, issue_type: str, preferred_date: str, time_slot: str) -> str:
+def schedule_technician_visit(db: Session, session_id: str, user_id: str, issue_type: str, preferred_date: str, time_slot: str, transcript: str = "") -> str:
     """Schedules a technician visit for physical issues."""
     ticket_id = f"TKT-{random.randint(10000, 99999)}"
     new_ticket = Ticket(
         id=ticket_id,
-        session_id=uuid.UUID(session_id),  # <-- FIX: Cast to UUID
-        user_id=uuid.UUID(user_id),        # <-- FIX: Cast to UUID
+        session_id=uuid.UUID(session_id),
+        user_id=uuid.UUID(user_id),
         issue_summary=f"Technician Visit Required: {issue_type}",
-        transcript="",
+        transcript=transcript, # ENSURE THIS IS HERE
         status="visit_scheduled"
     )
     db.add(new_ticket)
@@ -180,7 +176,7 @@ def schedule_technician_visit(db: Session, session_id: str, user_id: str, issue_
 
     new_visit = TechnicianVisit(
         ticket_id=ticket_id,
-        user_id=uuid.UUID(user_id),        # <-- FIX: Cast to UUID
+        user_id=uuid.UUID(user_id),
         technician_id=chosen_tech.id,
         scheduled_date=visit_date,
         time_slot=time_slot,
@@ -190,7 +186,7 @@ def schedule_technician_visit(db: Session, session_id: str, user_id: str, issue_
     db.commit()
 
     return f"Success! Ticket {ticket_id} created. A technician named {chosen_tech.name} is scheduled for {visit_date.strftime('%A, %B %d')} during the {time_slot}. Reference ID: {ticket_id}."
-
+    
 
 # ---------------------------------------------------------------------------
 # 6. Tool Schemas
@@ -302,40 +298,25 @@ TOOL_DEFINITIONS = [
 # 7. Tool Router
 # ---------------------------------------------------------------------------
 
-def execute_tool(db: Session, session_id: str, user_id: str, tool_name: str, arguments: dict) -> str:
+def execute_tool(db: Session, session_id: str, user_id: str, tool_name: str, arguments: dict, transcript_str: str) -> str:
     if tool_name == "check_outage":
         return check_outage(db=db, **arguments)
-
+    elif tool_name == "create_ticket":
+        arguments["user_id"] = user_id
+        # Pass transcript_str explicitly, and unpack the rest (issue_summary)
+        return create_ticket(db=db, session_id=session_id, transcript=transcript_str, **arguments)
+    elif tool_name == "schedule_technician_visit":
+        arguments["user_id"] = user_id
+        # Pass transcript_str explicitly, and unpack the rest (issue_type, preferred_date, time_slot)
+        return schedule_technician_visit(db=db, session_id=session_id, transcript=transcript_str, **arguments)
     elif tool_name == "search_knowledge_base":
         return search_knowledge_base(**arguments)
-
     elif tool_name == "get_account_status":
-        # user_id always comes from the verified JWT, never from AI arguments
-        return get_account_status(db=db, user_id=user_id)
-
+        arguments["user_id"] = user_id
+        return get_account_status(db=db, **arguments)
     elif tool_name == "get_ticket_status":
         return get_ticket_status(db=db, **arguments)
-
     elif tool_name == "run_remote_diagnostics":
         return run_remote_diagnostics(session_id=session_id)
-
-    elif tool_name == "create_ticket":
-        return create_ticket(
-            db=db,
-            session_id=session_id,
-            user_id=user_id,
-            issue_summary=arguments.get("issue_summary", ""),
-            transcript=arguments.get("transcript", "")
-        )
-
-    elif tool_name == "schedule_technician_visit":
-        return schedule_technician_visit(
-            db=db,
-            session_id=session_id,
-            user_id=user_id,
-            issue_type=arguments.get("issue_type", ""),
-            preferred_date=arguments.get("preferred_date", "tomorrow"),
-            time_slot=arguments.get("time_slot", "morning")
-        )
-
-    return "Tool not found."
+    else:
+        return "Tool not found."

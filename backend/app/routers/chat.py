@@ -21,7 +21,12 @@ async def chat_endpoint(request: Request, payload: ChatRequest, db: Session = De
         history = get_history(db, session_id)
         
         full_transcript = get_full_history(db, session_id)
-        transcript_str = "\n".join([f"{m['role']}: {m['content']}" for m in full_transcript])
+        
+        # --- NEW: Prepend User Info to the transcript ---
+        user_info = f"User Info:\nName: {current_user.name}\nAccount: {current_user.account_number}\nAddress: {current_user.address}\n\n"
+        chat_text = "\n".join([f"{m['role']}: {m['content']}" for m in full_transcript])
+        transcript_str = user_info + chat_text
+        # -----------------------------------------------
         
         ai_reply = await get_ai_response_with_tools(db, session_id, history, transcript_str, str(current_user.id))
         
@@ -36,7 +41,7 @@ async def chat_endpoint(request: Request, payload: ChatRequest, db: Session = De
     except Exception as e:
         print(f"Endpoint Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
+    
 @router.get("/sessions")
 def get_sessions(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     sessions = db.query(ChatSession).filter(ChatSession.user_id == current_user.id).order_by(ChatSession.created_at.desc()).all()
