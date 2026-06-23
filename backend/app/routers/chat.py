@@ -5,7 +5,7 @@ from app.models.schemas import ChatRequest, ChatResponse
 from app.services.nvidia_client import get_ai_response_with_tools, generate_session_summary
 from app.services.session import get_or_create_session, add_message, get_history, get_full_history
 from app.database import get_db
-from app.models.db_models import ChatSession, Message, Ticket, User, TechnicianVisit, SessionSummary
+from app.models.db_models import ChatSession, Message, Ticket, User, TechnicianVisit, SessionSummary, Outage
 from app.limiter import limiter
 from app.routers.auth import get_current_user
 import uuid
@@ -92,3 +92,8 @@ def delete_session(session_id: str, db: Session = Depends(get_db), current_user:
     except Exception as e:
         print(f"Delete Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    
+@router.get("/outages/active")
+def get_active_outages(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    outages = db.query(Outage).filter(Outage.is_active == True, Outage.is_deleted == False).all()
+    return [{"city": o.city, "status": o.status} for o in outages]

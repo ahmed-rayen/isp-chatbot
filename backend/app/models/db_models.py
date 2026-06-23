@@ -24,6 +24,7 @@ class Outage(Base):
     city = Column(String(50), unique=True, index=True)
     status = Column(String(200))
     is_active = Column(Boolean, default=True)
+    is_deleted = Column(Boolean, default=False)
 
 class Technician(Base):
     __tablename__ = "technicians"

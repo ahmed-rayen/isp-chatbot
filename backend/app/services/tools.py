@@ -20,15 +20,20 @@ client = OpenAI(
 # ---------------------------------------------------------------------------
 
 def check_outage(db: Session, city: str) -> str:
-    """Checks PostgreSQL for active outages in the given city."""
-    city_normalized = city.lower().strip()
-    outage = db.query(Outage).filter(Outage.city == city_normalized).first()
-    if not outage:
+    """Checks the PostgreSQL database for active outages in the given city."""
+    from sqlalchemy import func # Import inside or at top
+    city_formatted = city.lower().strip()
+    outage = db.query(Outage).filter(func.lower(Outage.city) == city_formatted).first()
+    
+    if outage:
+        if outage.is_deleted:
+            return f"All systems are operational in {city.title()}."
+        elif outage.is_active:
+            return f"There is an active issue in {city.title()}: {outage.status}"
+        else:
+            return f"All systems are operational in {city.title()}."
+    else:
         return f"No outage information available for {city.title()}."
-    if outage.is_active:
-        return f"There is an active issue in {city.title()}: {outage.status}"
-    return f"All systems are operational in {city.title()}."
-
 
 # ---------------------------------------------------------------------------
 # 2. Knowledge Base + Semantic Search

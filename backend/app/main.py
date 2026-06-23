@@ -28,12 +28,10 @@ if not db.query(db_models.User).filter(db_models.User.account_number == "4821").
     db.add(mock_user)
     print(" Mock user created (Account: 4821, PIN: 1234)")
 if not db.query(db_models.Outage).first():
-    db.add(db_models.Outage(city="Tunis", status="Confirmed fiber cut. ETA: 2 hours.", is_active=True))
-    db.add(db_models.Outage(city="Sfax", status="Scheduled maintenance. Ends at 14:00.", is_active=True))
-    db.add(db_models.Outage(city="Sousse", status="All systems operational.", is_active=False))
-    print(" Mock outages seeded")
-db.commit()
-db.close()
+    db.add(db_models.Outage(city="tunis", status="Confirmed fiber cut. ETA: 2 hours.", is_active=True))
+    db.add(db_models.Outage(city="sfax", status="Scheduled maintenance. Ends at 14:00.", is_active=True))
+    db.add(db_models.Outage(city="sousse", status="All systems operational.", is_active=False))
+    print("✅ Mock outages seeded")
 #techniciens
 if not db.query(db_models.Technician).first():
     db.add(db_models.Technician(name="Karim", daily_capacity=3))

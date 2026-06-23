@@ -2,11 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from app.database import get_db
-from app.models.db_models import User, Ticket, TechnicianVisit, Technician
+from app.models.db_models import User, Ticket, TechnicianVisit, Technician, Outage
 from app.routers.auth import get_current_user
 from datetime import date
+from sqlalchemy import func
 
 router = APIRouter()
+
+class OutageCreate(BaseModel):
+    city: str
+    status: str
 
 class TicketUpdate(BaseModel):
     status: str
@@ -86,3 +91,63 @@ def update_visit(ticket_id: str, payload: VisitUpdate, db: Session = Depends(get
 def get_technicians(db: Session = Depends(get_db), admin: User = Depends(admin_required)):
     techs = db.query(Technician).all()
     return [{"id": str(t.id), "name": t.name, "capacity": t.daily_capacity} for t in techs]
+
+@router.delete("/tickets/{ticket_id}")
+def delete_ticket(ticket_id: str, db: Session = Depends(get_db), admin: User = Depends(admin_required)):
+    ticket = db.query(Ticket).filter(Ticket.id == ticket_id.upper()).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    
+    # 1. Delete associated technician visit first (Foreign Key constraint)
+    db.query(TechnicianVisit).filter(TechnicianVisit.ticket_id == ticket.id).delete()
+    
+    # 2. Delete the ticket
+    db.delete(ticket)
+    db.commit()
+    return {"status": "deleted"}
+
+@router.get("/outages")
+def get_outages(db: Session = Depends(get_db), admin: User = Depends(admin_required)):
+    outages = db.query(Outage).filter(Outage.is_deleted == False).all()
+    return [{"city": o.city, "status": o.status, "is_active": o.is_active} for o in outages]
+
+@router.post("/outages")
+def create_outage(payload: OutageCreate, db: Session = Depends(get_db), admin: User = Depends(admin_required)):
+    # Case-insensitive check if city already exists
+    existing = db.query(Outage).filter(func.lower(Outage.city) == payload.city.lower()).first()
+    if existing:
+        if existing.is_deleted:
+            existing.is_deleted = False
+            existing.status = payload.status
+            existing.is_active = True
+        else:
+            raise HTTPException(status_code=400, detail="Outage already exists")
+    else:
+        outage = Outage(city=payload.city.lower(), status=payload.status, is_active=True)
+        db.add(outage)
+    db.commit()
+    return {"status": "created"}
+
+@router.patch("/outages/{city}")
+def toggle_outage(city: str, db: Session = Depends(get_db), admin: User = Depends(admin_required)):
+    # Case-insensitive search
+    outage = db.query(Outage).filter(func.lower(Outage.city) == city.lower(), Outage.is_deleted == False).first()
+    if not outage:
+        raise HTTPException(status_code=404, detail="Outage not found")
+    
+    outage.is_active = not outage.is_active
+    db.commit()
+    return {"city": outage.city, "is_active": outage.is_active}
+
+@router.delete("/outages/{city}")
+def delete_outage(city: str, db: Session = Depends(get_db), admin: User = Depends(admin_required)):
+    # Case-insensitive search
+    outage = db.query(Outage).filter(func.lower(Outage.city) == city.lower(), Outage.is_deleted == False).first()
+    if not outage:
+        raise HTTPException(status_code=404, detail="Outage not found")
+    
+    # SOFT DELETE
+    outage.is_deleted = True
+    outage.is_active = False
+    db.commit()
+    return {"status": "deleted"}
