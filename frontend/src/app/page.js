@@ -3,9 +3,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
-import { IconWifi, IconPlus, IconRobot, IconSend, IconTrash, IconMessage2, IconLogout } from '@tabler/icons-react';
+import { IconWifi, IconPlus, IconRobot, IconSend, IconTrash, IconMessage2, IconLogout, IconTicket, IconShield } from '@tabler/icons-react';
 import Link from 'next/link';
-import { IconTicket } from '@tabler/icons-react';
 
 export default function ChatPage() {
   const router = useRouter();
@@ -20,6 +19,7 @@ export default function ChatPage() {
   // User states
   const [userName, setUserName] = useState('');
   const [userAccount, setUserAccount] = useState('');
+  const [isAdmin, setIsAdmin] = useState(false);
   
   const messagesEndRef = useRef(null);
 
@@ -41,6 +41,7 @@ export default function ChatPage() {
     // Load user info for the sidebar
     setUserName(sessionStorage.getItem('user_name') || 'User');
     setUserAccount(sessionStorage.getItem('user_account') || '0000');
+    setIsAdmin(sessionStorage.getItem('is_admin') === 'true');
     
     fetchSessions(token);
   }, [router]);
@@ -213,12 +214,30 @@ export default function ChatPage() {
             </div>
           </div>
         </div>
+        
+        {/* Navigation Wrapper with minimal spacing gap */}
+        <div className="sidebar-nav" style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '12px' }}>
+          
+          {/* My Tickets Link */}
+          <Link 
+            href="/tickets" 
+            className="new-chat-btn" 
+            style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}
+          >
+            <IconTicket size={14} /> My Tickets
+          </Link>
 
-        <button className="new-chat-btn" style={{ marginBottom: '10px' }}>
- <Link href="/tickets" className="new-chat-btn" style={{ marginBottom: '10px', textDecoration: 'none' }}>
-  <IconTicket size={14} /> My Tickets
-</Link>
-</button>
+          {/* Admin Dashboard Link - Identical baseline layout matching My Tickets */}
+          {isAdmin && (
+            <Link 
+              href="/admin" 
+              className="new-chat-btn" 
+              style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}
+            >
+              <IconShield size={14} /> Admin Dashboard
+            </Link>
+          )}
+        </div>
 
         <div className="section-label">Recent</div>
         
@@ -247,12 +266,9 @@ export default function ChatPage() {
         <div className="sidebar-footer">
           <div className="user-row" style={{ justifyContent: 'space-between', width: '100%' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {/* Dynamic Initial */}
               <div className="avatar">{userName.charAt(0) || 'U'}</div>
               <div>
-                {/* Dynamic Name */}
                 <div className="user-name">{userName}</div>
-                {/* Dynamic Account Number */}
                 <div className="user-role">Client #{userAccount}</div>
               </div>
             </div>

@@ -37,6 +37,7 @@ export default function LoginPage() {
       sessionStorage.setItem('user_name', data.user.name);
       sessionStorage.setItem('user_plan', data.user.plan);
       sessionStorage.setItem('user_account', data.user.account_number);
+      sessionStorage.setItem('is_admin', data.user.is_admin);
 
       // Redirect to the main chat page
       router.push('/');
