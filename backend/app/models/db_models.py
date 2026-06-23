@@ -10,13 +10,22 @@ class User(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     account_number = Column(String(20), unique=True, index=True)
     name = Column(String(100))
+    email = Column(String(100), unique=True, index=True) # NEW
     hashed_pin = Column(String(100))
     plan = Column(String(50), default="Fiber 100")
     balance = Column(Float, default=0.0)
     due_date = Column(String(20), default="N/A")
-    address = Column(String(200), default="Unknown Address") # NEW
+    address = Column(String(200), default="Unknown Address")
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
+
+class Notification(Base):
+    __tablename__ = "notifications" # NEW TABLE
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    message = Column(Text, nullable=False)
+    is_read = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 class Outage(Base):
     __tablename__ = "outages"

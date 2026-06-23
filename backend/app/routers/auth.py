@@ -12,6 +12,7 @@ from app.services.auth import verify_password, hash_password, create_access_toke
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
+
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -38,6 +39,7 @@ def register(request: Request, payload: RegisterRequest, db: Session = Depends(g
         name=payload.name,
         account_number=account_number,
         hashed_pin=hash_password(payload.pin),
+        email=payload.email,
         plan="Fiber 100"
     )
     db.add(new_user)

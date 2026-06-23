@@ -7,6 +7,7 @@ class LoginRequest(BaseModel):
 class RegisterRequest(BaseModel):
     name: str
     pin: str
+    email: str
 
 class UserOut(BaseModel):
     id: str
@@ -19,3 +20,4 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str
     user: UserOut
+    

@@ -3,7 +3,19 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
-import { IconWifi, IconPlus, IconRobot, IconSend, IconTrash, IconMessage2, IconLogout, IconTicket, IconShield, IconAlertTriangle } from '@tabler/icons-react';
+import { 
+  IconWifi, 
+  IconPlus, 
+  IconRobot, 
+  IconSend, 
+  IconTrash, 
+  IconMessage2, 
+  IconLogout, 
+  IconTicket, 
+  IconShield, 
+  IconAlertTriangle, 
+  IconBell
+} from '@tabler/icons-react';
 import Link from 'next/link';
 
 export default function ChatPage() {
@@ -23,6 +35,10 @@ export default function ChatPage() {
   
   // Active Outages Alert Banner State
   const [activeOutages, setActiveOutages] = useState([]);
+
+  // Notification States
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifs, setShowNotifs] = useState(false);
   
   const messagesEndRef = useRef(null);
 
@@ -33,7 +49,7 @@ export default function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
-  // Auth Check, Fetch Sessions & Active Regional Outages on mount
+  // Auth Check, Fetch Sessions, Active Regional Outages & Notifications on mount
   useEffect(() => {
     const token = sessionStorage.getItem('access_token');
     if (!token) {
@@ -59,8 +75,29 @@ export default function ChatPage() {
         }
       } catch (e) { console.error("Failed to load outages"); }
     };
+
+    // Fetch User Notifications
+    const fetchNotifs = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/notifications`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) setNotifications(await res.json());
+      } catch (e) { console.error("Failed to load notifications"); }
+    };
+
     fetchOutages();
+    fetchNotifs();
   }, [router]);
+
+  // Handle Mark Read
+  const handleMarkRead = async (id) => {
+    await fetch(`${API_BASE}/notifications/${id}/read`, {
+      method: 'PATCH',
+      headers: { 'Authorization': `Bearer ${sessionStorage.getItem('access_token')}` }
+    });
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+  };
 
   const fetchSessions = async (customToken = null) => {
     const token = customToken || sessionStorage.getItem('access_token');
@@ -293,9 +330,63 @@ export default function ChatPage() {
 
       {/* CHAT AREA */}
       <div className="chat-area">
-        <div className="chat-header">
+        {/* DYNAMIC UPDATED HEADER WITH DROPDOWN PANEL */}
+        <div className="chat-header" style={{ position: 'relative' }}>
           <div className="chat-title">Technical Support</div>
-          <div className="status-pill"><div className="dot"></div> Online</div>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            {/* Notification Bell */}
+            <div style={{ position: 'relative' }}>
+              <button 
+                onClick={() => setShowNotifs(!showNotifs)}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', position: 'relative' }}
+              >
+                <IconBell size={20} color="#1A1A1A" />
+                {notifications.filter(n => !n.is_read).length > 0 && (
+                  <span style={{
+                    position: 'absolute', top: '-2px', right: '-2px', width: '8px', height: '8px',
+                    borderRadius: '50%', background: '#FF6B00', border: '1px solid #fff'
+                  }}></span>
+                )}
+              </button>
+              
+              {/* Dropdown Box Container */}
+              {showNotifs && (
+                <div style={{
+                  position: 'absolute', top: '30px', right: '0', width: '300px',
+                  background: '#fff', borderRadius: '12px', boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
+                  border: '0.5px solid #E8E8E8', zIndex: 100, overflow: 'hidden'
+                }}>
+                  <div style={{ padding: '12px 16px', borderBottom: '0.5px solid #E8E8E8', fontWeight: 600 }}>
+                    Notifications
+                  </div>
+                  <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                    {notifications.length === 0 ? (
+                      <p style={{ padding: '16px', fontSize: '13px', color: '#888', textAlign: 'center' }}>No notifications</p>
+                    ) : (
+                      notifications.map(n => (
+                        <div 
+                          key={n.id} 
+                          onClick={() => !n.is_read && handleMarkRead(n.id)}
+                          style={{ 
+                            padding: '12px 16px', 
+                            borderBottom: '0.5px solid #F7F7F7', 
+                            cursor: n.is_read ? 'default' : 'pointer',
+                            background: n.is_read ? '#fff' : '#FFF3EB'
+                          }}
+                        >
+                          <p style={{ fontSize: '13px', color: '#1A1A1A', marginBottom: '4px' }}>{n.message}</p>
+                          <span style={{ fontSize: '11px', color: '#AAA' }}>{n.time}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="status-pill"><div className="dot"></div> Online</div>
+          </div>
         </div>
 
         {/* OUTAGE ALERT BANNER CONTAINER */}

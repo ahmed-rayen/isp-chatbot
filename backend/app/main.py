@@ -8,7 +8,7 @@ from app.routers import chat, auth          # Added auth
 from app.database import engine, Base, SessionLocal  # Added SessionLocal
 from app.models import db_models
 from app.services.auth import hash_password # Added hash_password
-from app.routers import chat, auth, tickets, admin 
+from app.routers import chat, auth, tickets, admin, notifications
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -19,6 +19,7 @@ if not db.query(db_models.User).filter(db_models.User.account_number == "4821").
     mock_user = db_models.User(
         account_number="4821",
         name="Ahmed H.",
+        email="ahmed@example.com",
         hashed_pin=hash_password("1234"),
         plan="Fiber 500",
         balance=0.0,
@@ -43,6 +44,7 @@ if not db.query(db_models.User).filter(db_models.User.is_admin == True).first():
     admin_user = db_models.User(
         account_number="0000",
         name="Super Admin",
+        email="admin@example.com",
         hashed_pin=hash_password("1234"),
         plan="Staff",
         is_admin=True
@@ -72,6 +74,7 @@ app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
 app.include_router(chat.router, prefix="/api", tags=["Chat"])
 app.include_router(tickets.router, prefix="/api", tags=["Tickets"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
+app.include_router(notifications.router, prefix="/api", tags=["Notifications"])
 @app.get("/")
 def root():
     return {"status": "ok", "service": "ISP Chatbot API"}

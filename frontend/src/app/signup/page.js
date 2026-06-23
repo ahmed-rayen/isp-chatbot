@@ -12,7 +12,7 @@ export default function SignupPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [successAccount, setSuccessAccount] = useState(''); // NEW: To hold the generated ID
   const router = useRouter();
-
+  const [email, setEmail] = useState('');
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
   const handleSignup = async (e) => {
@@ -24,7 +24,7 @@ export default function SignupPage() {
       const response = await fetch(`${API_BASE}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, pin })
+        body: JSON.stringify({ name,email, pin })
       });
 
       const data = await response.json();
@@ -103,6 +103,10 @@ export default function SignupPage() {
           <div style={{ marginBottom: '24px' }}>
             <label style={{ display: 'block', fontSize: '13px', color: '#555', marginBottom: '6px' }}>PIN Code</label>
             <input type="password" value={pin} onChange={(e) => setPin(e.target.value)} required style={{ width: '100%', padding: '12px', fontSize: '14px', border: '0.5px solid #E0E0E0', borderRadius: '8px', outline: 'none', boxSizing: 'border-box' }} placeholder="Create a 4-digit PIN" />
+          </div>
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ display: 'block', fontSize: '13px', color: '#555', marginBottom: '6px' }}>Email Address</label>
+           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required style={{ width: '100%', padding: '12px', fontSize: '14px', border: '0.5px solid #E0E0E0', borderRadius: '8px', outline: 'none', boxSizing: 'border-box' }} placeholder="you@example.com" />
           </div>
           <button type="submit" disabled={isLoading} style={{ width: '100%', padding: '12px', background: '#FF6B00', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 500, cursor: 'pointer', opacity: isLoading ? 0.7 : 1 }}>
             {isLoading ? 'Creating account...' : 'Sign Up'}

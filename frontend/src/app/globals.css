@@ -66,8 +66,14 @@ html, body { height: 100%; background: #f0f2f5; font-family: -apple-system, Blin
 /* Markdown styling inside bot bubble */
 .bot-bubble ul, .bot-bubble ol {
   padding-left: 20px;
-  margin: 8px 0;
+  margin: 4px 0;
 }
 .bot-bubble li {
-  margin-bottom: 4px;
+  margin-bottom: 2px;
+}
+.bot-bubble p {
+  margin: 0;
+}
+.bot-bubble {
+  line-height: 1.4;
 }
