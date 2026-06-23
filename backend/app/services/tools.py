@@ -36,7 +36,7 @@ def check_outage(db: Session, city: str) -> str:
         return f"No outage information available for {city.title()}."
 
 # ---------------------------------------------------------------------------
-# 2. Knowledge Base + Semantic Search
+# 2. Knowledge Base + Semantic Search (Chunked Implementation)
 # ---------------------------------------------------------------------------
 
 KB_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "data", "knowledge_base.json")
@@ -55,34 +55,59 @@ def get_embedding(text: str) -> list:
     )
     return response.data[0].embedding
 
-print("Generating KB Embeddings...")
-KB_EMBEDDINGS = []
+print("🧠 Generating KB Chunk Embeddings...")
+KB_CHUNKS = [] # NEW: List of individual paragraphs/bullets
 try:
     for item in KB_DATA:
-        text_to_embed = f"{item['topic']} {' '.join(item['tags'])} {item['content']}"
-        KB_EMBEDDINGS.append(get_embedding(text_to_embed))
-    print("KB Embeddings Ready.")
+        # Split the article into smaller chunks (by newlines)
+        raw_chunks = item["content"].split("\n")
+        for chunk in raw_chunks:
+            chunk = chunk.strip()
+            if len(chunk) > 15: # Ignore empty/short lines
+                text_to_embed = f"{item['topic']} {' '.join(item['tags'])} {chunk}"
+                vector = get_embedding(text_to_embed)
+                KB_CHUNKS.append({
+                    "text": chunk,
+                    "vector": vector,
+                    "topic": item["topic"]
+                })
+    print(f"✅ {len(KB_CHUNKS)} KB Chunks Embedded & Ready!")
 except Exception as e:
-    print(f"Warning: Could not generate KB embeddings at startup. RAG disabled. Error: {e}")
+    print(f"⚠️ Warning: Could not generate KB chunk embeddings. RAG will be disabled. Error: {e}")
 
 def cosine_similarity(vec1, vec2):
     return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
 
 def search_knowledge_base(query: str) -> str:
-    """Semantic search over the knowledge base using vector embeddings."""
-    if not KB_EMBEDDINGS:
+    """Semantic search using Vector Embeddings, returning top 3 chunks."""
+    if not KB_CHUNKS:
         return "The knowledge base is currently offline. Please try again later."
+        
     try:
         query_vector = get_embedding(query)
-        scores = sorted(
-            [(i, cosine_similarity(query_vector, vec)) for i, vec in enumerate(KB_EMBEDDINGS)],
-            key=lambda x: x[1],
-            reverse=True
-        )
-        best_index, best_score = scores[0]
-        if best_score > 0.5:
-            return KB_DATA[best_index]["content"]
-        return "No information found in the knowledge base for this query."
+        scores = []
+        
+        # Score every chunk
+        for i, kb_chunk in enumerate(KB_CHUNKS):
+            score = cosine_similarity(query_vector, kb_chunk["vector"])
+            scores.append((i, score))
+            
+        # Sort by highest score
+        scores.sort(key=lambda x: x[1], reverse=True)
+        
+        # Get the top 3 chunks (if they score above 0.5)
+        top_indices = [idx for idx, score in scores[:3] if score > 0.5]
+        
+        if not top_indices:
+            return "No information found in the knowledge base for this query."
+            
+        # Combine the top 3 chunks into one string
+        result_chunks = [KB_CHUNKS[idx]["text"] for idx in top_indices]
+        final_result = "\n".join(result_chunks)
+        
+        print(f"🎯 Semantic Match Found! Returning {len(top_indices)} chunks.")
+        return final_result
+            
     except Exception as e:
         return f"Error during semantic search: {str(e)}"
 
@@ -133,7 +158,7 @@ def create_ticket(db: Session, session_id: str, user_id: str, issue_summary: str
         session_id=uuid.UUID(session_id),
         user_id=uuid.UUID(user_id),
         issue_summary=issue_summary,
-        transcript=transcript, # ENSURE THIS IS HERE
+        transcript=transcript,
         status="open"
     )
     db.add(new_ticket)
@@ -148,7 +173,7 @@ def schedule_technician_visit(db: Session, session_id: str, user_id: str, issue_
         session_id=uuid.UUID(session_id),
         user_id=uuid.UUID(user_id),
         issue_summary=f"Technician Visit Required: {issue_type}",
-        transcript=transcript, # ENSURE THIS IS HERE
+        transcript=transcript,
         status="visit_scheduled"
     )
     db.add(new_ticket)
@@ -279,8 +304,7 @@ TOOL_DEFINITIONS = [
             }
         }
     },
-        
-            {
+    {
         "type": "function",
         "function": {
             "name": "schedule_technician_visit",
@@ -292,7 +316,7 @@ TOOL_DEFINITIONS = [
                     "preferred_date": {"type": "string", "description": "The exact date the user requested, e.g., '2024-05-20' or 'tomorrow'."},
                     "time_slot": {"type": "string", "enum": ["morning", "afternoon", "evening"], "description": "The exact time slot the user requested."}
                 },
-                "required": ["issue_type"] # Only issue_type is required to start the process!
+                "required": ["issue_type"]
             }
         }
     }
@@ -308,11 +332,9 @@ def execute_tool(db: Session, session_id: str, user_id: str, tool_name: str, arg
         return check_outage(db=db, **arguments)
     elif tool_name == "create_ticket":
         arguments["user_id"] = user_id
-        # Pass transcript_str explicitly, and unpack the rest (issue_summary)
         return create_ticket(db=db, session_id=session_id, transcript=transcript_str, **arguments)
     elif tool_name == "schedule_technician_visit":
         arguments["user_id"] = user_id
-        # Pass transcript_str explicitly, and unpack the rest (issue_type, preferred_date, time_slot)
         return schedule_technician_visit(db=db, session_id=session_id, transcript=transcript_str, **arguments)
     elif tool_name == "search_knowledge_base":
         return search_knowledge_base(**arguments)
