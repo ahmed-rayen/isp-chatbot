@@ -64,7 +64,7 @@ async def get_ai_response_with_tools(db: Session, session_id: str, chat_history:
 
                     # Run standard execution if guardrail didn't catch it
                     print(f"AI is calling tool: {tool_name} with args {tool_args}")
-                    tool_result = execute_tool(db, session_id, user_id, tool_name, tool_args, transcript_str)
+                    tool_result = await execute_tool(db, session_id, user_id, tool_name, tool_args, transcript_str)
                     
                     messages.append({
                         "role": "tool",
@@ -85,7 +85,7 @@ async def get_ai_response_with_tools(db: Session, session_id: str, chat_history:
             return message.content
 
         except (APIConnectionError, RateLimitError, APIError) as e:
-            print(f"⚠️ NVIDIA API Error (Attempt {attempt + 1}/{max_retries}): {e}")
+            print(f" NVIDIA API Error (Attempt {attempt + 1}/{max_retries}): {e}")
             if attempt < max_retries - 1:
                 await asyncio.sleep(2)  # Secure async delay
             else:

@@ -11,3 +11,4 @@ slowapi
 react-markdown
 python-jose[cryptography]
 passlib[bcrypt]
+rank_bm25
