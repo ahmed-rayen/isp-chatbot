@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
-import { IconWifi, IconPlus, IconRobot, IconSend, IconTrash, IconMessage2, IconLogout, IconTicket, IconShield } from '@tabler/icons-react';
+import { IconWifi, IconPlus, IconRobot, IconSend, IconTrash, IconMessage2, IconLogout, IconTicket, IconShield, IconAlertTriangle } from '@tabler/icons-react';
 import Link from 'next/link';
 
 export default function ChatPage() {
@@ -21,6 +21,9 @@ export default function ChatPage() {
   const [userAccount, setUserAccount] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
   
+  // Active Outages Alert Banner State
+  const [activeOutages, setActiveOutages] = useState([]);
+  
   const messagesEndRef = useRef(null);
 
   // Fallback to localhost if env var is missing
@@ -30,7 +33,7 @@ export default function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
-  // 1. Auth Check & Fetch Sessions on mount
+  // Auth Check, Fetch Sessions & Active Regional Outages on mount
   useEffect(() => {
     const token = sessionStorage.getItem('access_token');
     if (!token) {
@@ -44,9 +47,21 @@ export default function ChatPage() {
     setIsAdmin(sessionStorage.getItem('is_admin') === 'true');
     
     fetchSessions(token);
+
+    // Fetch active local outages if any are currently impacting regional nodes
+    const fetchOutages = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/outages/active`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          setActiveOutages(await res.json());
+        }
+      } catch (e) { console.error("Failed to load outages"); }
+    };
+    fetchOutages();
   }, [router]);
 
-  // 2. Update all fetch calls to include the Bearer token
   const fetchSessions = async (customToken = null) => {
     const token = customToken || sessionStorage.getItem('access_token');
     if (!token) return router.push('/login');
@@ -71,7 +86,6 @@ export default function ChatPage() {
   };
 
   const startNewChat = async () => {
-    // 1. If we are in a session, summarize it first
     if (sessionId) {
       try {
         const token = sessionStorage.getItem('access_token');
@@ -82,7 +96,6 @@ export default function ChatPage() {
       } catch (e) { console.error("Failed to summarize previous chat"); }
     }
 
-    // 2. Clear the UI for the new chat
     setSessionId(null);
     setMessages([{ role: 'assistant', content: "Hello! I'm NetAssist, your technical support AI. How can I help you today?" }]);
   };
@@ -215,9 +228,8 @@ export default function ChatPage() {
           </div>
         </div>
         
-        {/* Navigation Wrapper with minimal spacing gap */}
+        {/* Navigation Wrapper */}
         <div className="sidebar-nav" style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '12px' }}>
-          
           {/* My Tickets Link */}
           <Link 
             href="/tickets" 
@@ -227,7 +239,7 @@ export default function ChatPage() {
             <IconTicket size={14} /> My Tickets
           </Link>
 
-          {/* Admin Dashboard Link - Identical baseline layout matching My Tickets */}
+          {/* Admin Dashboard Link */}
           {isAdmin && (
             <Link 
               href="/admin" 
@@ -285,6 +297,30 @@ export default function ChatPage() {
           <div className="chat-title">Technical Support</div>
           <div className="status-pill"><div className="dot"></div> Online</div>
         </div>
+
+        {/* OUTAGE ALERT BANNER CONTAINER */}
+        {activeOutages.length > 0 && (
+          <div style={{ 
+            margin: '16px 20px 0', 
+            padding: '12px 16px', 
+            background: '#FFF3EB', 
+            border: '1px solid #FF6B00', 
+            borderRadius: '12px', 
+            display: 'flex', 
+            alignItems: 'flex-start', 
+            gap: '12px' 
+          }}>
+            <IconAlertTriangle size={20} color="#FF6B00" style={{ flexShrink: 0, marginTop: '2px' }} />
+            <div>
+              <h4 style={{ fontSize: '14px', fontWeight: 600, color: '#1A1A1A', marginBottom: '4px' }}>Active Outages in Your Area</h4>
+              {activeOutages.map(o => (
+                <p key={o.city} style={{ fontSize: '13px', color: '#555', margin: '4px 0 0' }}>
+                  <strong style={{ textTransform: 'capitalize' }}>{o.city}:</strong> {o.status}
+                </p>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="messages">
           {messages.map((msg, index) => (
