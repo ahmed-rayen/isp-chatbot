@@ -11,6 +11,10 @@ export default function AdminDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [expandedTicket, setExpandedTicket] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  
+  // New States for Admin Actions
+  const [technicians, setTechnicians] = useState([]);
+  const [updateStatus, setUpdateStatus] = useState({});
 
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
@@ -34,9 +38,52 @@ export default function AdminDashboard() {
       } catch (e) { console.error("Failed to load admin tickets"); }
       finally { setIsLoading(false); }
     };
+
+    // New fetch handler for loading available technicians
+    const fetchTechs = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/admin/technicians`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        setTechnicians(data);
+      } catch (e) { console.error("Failed to load techs"); }
+    };
     
     fetchAllTickets();
-  }, [router]);
+    fetchTechs();
+  }, [router, API_BASE]);
+
+  // Handler function to update ticket statuses
+  const handleUpdateStatus = async (ticketId, newStatus) => {
+    try {
+      await fetch(`${API_BASE}/admin/tickets/${ticketId}`, {
+        method: 'PATCH',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sessionStorage.getItem('access_token')}` 
+        },
+        body: JSON.stringify({ status: newStatus })
+      });
+      // Update local state reactively
+      setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, status: newStatus } : t));
+    } catch (e) { console.error("Failed to update status"); }
+  };
+
+  // Handler function to reschedule or reassign visits
+  const handleReschedule = async (ticketId, date, slot, techId) => {
+    try {
+      await fetch(`${API_BASE}/admin/visits/${ticketId}`, {
+        method: 'PATCH',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sessionStorage.getItem('access_token')}` 
+        },
+        body: JSON.stringify({ scheduled_date: date, time_slot: slot, technician_id: techId })
+      });
+      alert("Visit updated!");
+    } catch (e) { console.error("Failed to update visit"); }
+  };
 
   // Hide UI until we confirm admin status
   if (!isAdmin) return null;
@@ -100,24 +147,59 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* EXPANDED TRANSCRIPT VIEW */}
+                {/* INTEGRATED EXPANDED VIEW WITH ACTION CONTROLS */}
                 {expandedTicket === ticket.id && (
                   <div style={{ borderTop: '0.5px solid #E8E8E8', padding: '20px', background: '#FAFAFA' }}>
-                    <div style={{ display: 'flex', gap: '24px', marginBottom: '16px' }}>
-                      <div>
-                        <span style={{ fontSize: '12px', color: '#888' }}>Status</span>
-                        <p style={{ fontSize: '14px', fontWeight: 500 }}>{ticket.status}</p>
+                    {/* Admin Controls Area */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                      
+                      {/* Change Status Control Dropdown */}
+                      <div style={{ background: '#fff', padding: '12px', borderRadius: '8px', border: '0.5px solid #E8E8E8' }}>
+                        <label style={{ fontSize: '12px', color: '#888', display: 'block', marginBottom: '4px' }}>Change Status</label>
+                        <select 
+                          value={ticket.status} 
+                          onChange={(e) => handleUpdateStatus(ticket.id, e.target.value)}
+                          style={{ width: '100%', padding: '8px', fontSize: '13px', border: '0.5px solid #E0E0E0', borderRadius: '6px' }}
+                        >
+                          <option value="open">Open</option>
+                          <option value="in_progress">In Progress</option>
+                          <option value="visit_scheduled">Visit Scheduled</option>
+                          <option value="resolved">Resolved</option>
+                          <option value="closed">Closed</option>
+                        </select>
                       </div>
-                      <div>
-                        <span style={{ fontSize: '12px', color: '#888' }}>Technician</span>
-                        <p style={{ fontSize: '14px', fontWeight: 500 }}>{ticket.technician || 'None'}</p>
-                      </div>
-                      <div>
-                        <span style={{ fontSize: '12px', color: '#888' }}>Visit Date</span>
-                        <p style={{ fontSize: '14px', fontWeight: 500 }}>{ticket.visit_date ? `${ticket.visit_date} (${ticket.visit_slot})` : 'None'}</p>
-                      </div>
+
+                      {/* Reschedule Visit Section */}
+                      {ticket.technician && (
+                        <div style={{ background: '#fff', padding: '12px', borderRadius: '8px', border: '0.5px solid #E8E8E8' }}>
+                          <label style={{ fontSize: '12px', color: '#888', display: 'block', marginBottom: '4px' }}>Reassign / Reschedule</label>
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            <select id={`tech-${ticket.id}`} defaultValue={ticket.technician} style={{ flex: 1, padding: '6px', fontSize: '12px', border: '0.5px solid #E0E0E0', borderRadius: '6px' }}>
+                              {technicians.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                            </select>
+                            <input id={`date-${ticket.id}`} type="date" defaultValue={ticket.visit_date} style={{ flex: 1, padding: '6px', fontSize: '12px', border: '0.5px solid #E0E0E0', borderRadius: '6px' }} />
+                            <select id={`slot-${ticket.id}`} defaultValue={ticket.visit_slot} style={{ flex: 1, padding: '6px', fontSize: '12px', border: '0.5px solid #E0E0E0', borderRadius: '6px' }}>
+                              <option value="morning">Morning</option>
+                              <option value="afternoon">Afternoon</option>
+                              <option value="evening">Evening</option>
+                            </select>
+                            <button 
+                              onClick={() => handleReschedule(
+                                ticket.id, 
+                                document.getElementById(`date-${ticket.id}`).value, 
+                                document.getElementById(`slot-${ticket.id}`).value, 
+                                document.getElementById(`tech-${ticket.id}`).value
+                              )}
+                              style={{ padding: '6px 12px', background: '#1A1A1A', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}
+                            >
+                              Update
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
+                    {/* Chat Transcript Panel */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
                       <IconHistory size={16} color="#888" />
                       <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#1A1A1A' }}>Chat Transcript</h3>
