@@ -13,6 +13,7 @@ class UserOut(BaseModel):
     account_number: str
     name: str
     plan: str
+    is_admin: bool = False 
 
 class TokenResponse(BaseModel):
     access_token: str

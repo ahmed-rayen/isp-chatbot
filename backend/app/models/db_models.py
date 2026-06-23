@@ -16,6 +16,7 @@ class User(Base):
     due_date = Column(String(20), default="N/A")
     address = Column(String(200), default="Unknown Address") # NEW
     is_active = Column(Boolean, default=True)
+    is_admin = Column(Boolean, default=False)
 
 class Outage(Base):
     __tablename__ = "outages"
@@ -74,3 +75,4 @@ class SessionSummary(Base):
     summary = Column(Text, nullable=False)
     status = Column(String(20), default="resolved") # resolved/unresolved
     created_at = Column(DateTime, default=datetime.utcnow)
+    

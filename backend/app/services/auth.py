@@ -5,11 +5,9 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from app.config import settings
 
-# Password Hashing Setup
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# JWT Setup
-SECRET_KEY = "YOUR_SUPER_SECRET_KEY_CHANGE_THIS_LATER" # In production, put this in .env!
+SECRET_KEY = "YOUR_SUPER_SECRET_KEY_CHANGE_THIS_LATER"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 

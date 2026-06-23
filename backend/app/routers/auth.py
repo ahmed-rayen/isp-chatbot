@@ -53,7 +53,8 @@ def register(request: Request, payload: RegisterRequest, db: Session = Depends(g
             "id": str(new_user.id),
             "account_number": new_user.account_number,
             "name": new_user.name,
-            "plan": new_user.plan
+            "plan": new_user.plan,
+            
         }
     }
 
@@ -66,7 +67,6 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid account number or PIN"
         )
-        
     access_token = create_access_token(data={"sub": str(user.id)})
     return {
         "access_token": access_token,
@@ -75,7 +75,8 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
             "id": str(user.id),
             "account_number": user.account_number,
             "name": user.name,
-            "plan": user.plan
+            "plan": user.plan,
+            "is_admin": user.is_admin
         }
     }
 
