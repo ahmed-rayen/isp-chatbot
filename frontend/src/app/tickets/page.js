@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { IconWifi, IconArrowLeft, IconClock, IconUser } from '@tabler/icons-react';
+import { apiFetch } from '../lib/api'; // <-- ADD IMPORT
 
 export default function TicketsPage() {
   const router = useRouter();
@@ -21,18 +22,17 @@ export default function TicketsPage() {
     
     const fetchTickets = async () => {
       try {
-        const res = await fetch(`${API_BASE}/tickets`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        // USE apiFetch INSTEAD OF RAW fetch
+        const res = await apiFetch(`${API_BASE}/tickets`);
         if (res.status === 401) { router.push('/login'); return; }
         const data = await res.json();
         setTickets(data);
-      } catch (e) { console.error("Failed to load tickets"); }
+      } catch (e) { console.error("Failed to load tickets:", e.message); }
       finally { setIsLoading(false); }
     };
     
     fetchTickets();
-  }, [router]);
+  }, [router, API_BASE]);
 
   return (
     <div style={{ background: '#f0f2f5', minHeight: '100vh', padding: '40px' }}>
@@ -48,6 +48,13 @@ export default function TicketsPage() {
             <h1 style={{ fontSize: '24px', fontWeight: 600, color: '#1A1A1A' }}>My Support Tickets</h1>
           </div>
         </div>
+
+        {!isLoading && (
+          <div style={{ background: '#fff', padding: '16px 24px', borderRadius: '12px', marginBottom: '24px', border: '0.5px solid #E8E8E8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '14px', color: '#555' }}>Total Tickets</span>
+            <span style={{ fontSize: '24px', fontWeight: 700, color: '#FF6B00' }}>{tickets.length}</span>
+          </div>
+        )}
 
         {isLoading ? (
           <p style={{ textAlign: 'center', color: '#888' }}>Loading tickets...</p>

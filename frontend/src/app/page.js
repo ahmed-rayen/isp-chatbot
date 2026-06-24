@@ -1,5 +1,5 @@
 'use client';
-
+import { apiFetch } from './lib/api';
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
@@ -14,7 +14,8 @@ import {
   IconTicket, 
   IconShield, 
   IconAlertTriangle, 
-  IconBell
+  IconBell,
+  IconStar 
 } from '@tabler/icons-react';
 import Link from 'next/link';
 
@@ -28,28 +29,24 @@ export default function ChatPage() {
   const [sessionId, setSessionId] = useState(null);
   const [chatSessions, setChatSessions] = useState([]);
   
-  // User states
   const [userName, setUserName] = useState('');
   const [userAccount, setUserAccount] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
   
-  // Active Outages Alert Banner State
   const [activeOutages, setActiveOutages] = useState([]);
-
-  // Notification States
   const [notifications, setNotifications] = useState([]);
   const [showNotifs, setShowNotifs] = useState(false);
+
+  const [pendingFeedback, setPendingFeedback] = useState(null);
+  const [rating, setRating] = useState(0);
+  const [comment, setComment] = useState('');
   
   const messagesEndRef = useRef(null);
-
-  // Fallback to localhost if env var is missing
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
-  // Auth Check, Fetch Sessions, Active Regional Outages & Notifications on mount
   useEffect(() => {
     const token = sessionStorage.getItem('access_token');
     if (!token) {
@@ -57,119 +54,139 @@ export default function ChatPage() {
       return;
     }
     
-    // Load user info for the sidebar
     setUserName(sessionStorage.getItem('user_name') || 'User');
     setUserAccount(sessionStorage.getItem('user_account') || '0000');
     setIsAdmin(sessionStorage.getItem('is_admin') === 'true');
     
-    fetchSessions(token);
+    fetchSessions();
 
-    // Fetch active local outages if any are currently impacting regional nodes
     const fetchOutages = async () => {
       try {
-        const res = await fetch(`${API_BASE}/outages/active`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const res = await apiFetch('/outages/active');
         if (res.ok) {
-          setActiveOutages(await res.json());
+          const data = await res.json();
+          setActiveOutages(data || []);
         }
-      } catch (e) { console.error("Failed to load outages"); }
+      } catch (e) { console.error("Failed to load outages", e.message); }
     };
 
-    // Fetch User Notifications
     const fetchNotifs = async () => {
       try {
-        const res = await fetch(`${API_BASE}/notifications`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (res.ok) setNotifications(await res.json());
-      } catch (e) { console.error("Failed to load notifications"); }
+        const res = await apiFetch('/notifications');
+        if (res.ok) {
+          const data = await res.json();
+          setNotifications(data || []);
+        }
+      } catch (e) { console.error("Failed to load notifications", e.message); }
     };
 
+    const checkFeedback = async () => {
+      try {
+        const tRes = await apiFetch('/tickets');
+        if (!tRes.ok) return;
+        const tickets = await tRes.json();
+        if (!tickets || !Array.isArray(tickets)) return;
+        
+        for (const ticket of tickets.filter(t => t.status === 'resolved')) {
+          const fRes = await apiFetch(`/tickets/${ticket.id}/needs-feedback`);
+          if (!fRes.ok) continue;
+          const fData = await fRes.json();
+          if (fData && fData.needs_feedback) {
+            setPendingFeedback({ ticket_id: ticket.id, session_id: ticket.session_id || null });
+            break; // Prompt for one modal sequence at a time
+          }
+        }
+      } catch (e) {
+        console.error("Failed to run feedback check", e.message);
+      }
+    };
+
+    // Initial fetch on load
     fetchOutages();
     fetchNotifs();
+    checkFeedback();
+
+    // NEW: Set up polling every 20 seconds for notifs and feedback
+    const intervalId = setInterval(() => {
+      fetchNotifs();
+      checkFeedback();
+    }, 20000); // 20,000 ms = 20 seconds
+
+    // Cleanup interval on unmount
+    return () => clearInterval(intervalId);
   }, [router]);
 
-  // Handle Mark Read
-  const handleMarkRead = async (id) => {
-    await fetch(`${API_BASE}/notifications/${id}/read`, {
-      method: 'PATCH',
-      headers: { 'Authorization': `Bearer ${sessionStorage.getItem('access_token')}` }
-    });
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+  const submitFeedback = async () => {
+    if (!pendingFeedback || rating === 0) return;
+    try {
+      await apiFetch('/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: pendingFeedback.session_id,
+          ticket_id: pendingFeedback.ticket_id,
+          rating: rating,
+          comment: comment
+        })
+      });
+    } catch (e) {
+      console.error("Failed to submit feedback", e.message);
+    } finally {
+      setPendingFeedback(null);
+      setRating(0);
+      setComment('');
+    }
   };
 
-  const fetchSessions = async (customToken = null) => {
-    const token = customToken || sessionStorage.getItem('access_token');
-    if (!token) return router.push('/login');
-    
+  const handleMarkRead = async (id) => {
     try {
-      const res = await fetch(`${API_BASE}/sessions`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.status === 401) { router.push('/login'); return; }
-      
+      await apiFetch(`/notifications/${id}/read`, { method: 'PATCH' });
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+    } catch (e) { console.error("Failed to mark notification as read", e.message); }
+  };
+
+  const fetchSessions = async () => {
+    try {
+      const res = await apiFetch('/sessions');
+      if (!res.ok) return;
       const data = await res.json();
-      
-      // SAFETY CHECK: Only set state if it's an array!
-      if (Array.isArray(data)) {
-        setChatSessions(data);
-      } else {
-        setChatSessions([]);
-      }
-    } catch (e) { 
-      console.error("Failed to load sessions"); 
-    }
+      if (Array.isArray(data)) setChatSessions(data);
+      else setChatSessions([]);
+    } catch (e) { console.error("Failed to load sessions", e.message); }
   };
 
   const startNewChat = async () => {
     if (sessionId) {
       try {
-        const token = sessionStorage.getItem('access_token');
-        await fetch(`${API_BASE}/sessions/${sessionId}/summarize`, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-      } catch (e) { console.error("Failed to summarize previous chat"); }
+        await apiFetch(`/sessions/${sessionId}/summarize`, { method: 'POST' });
+      } catch (e) { console.error("Failed to summarize previous chat", e.message); }
     }
-
     setSessionId(null);
     setMessages([{ role: 'assistant', content: "Hello! I'm NetAssist, your technical support AI. How can I help you today?" }]);
   };
 
   const loadChat = async (id) => {
-    const token = sessionStorage.getItem('access_token');
-    if (!token) return router.push('/login');
-    
     try {
-      const res = await fetch(`${API_BASE}/sessions/${id}/messages`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.status === 401) { router.push('/login'); return; }
+      const res = await apiFetch(`/sessions/${id}/messages`);
+      if (!res.ok) return;
       const data = await res.json();
-      if (data.length > 0) {
+      if (data && data.length > 0) {
         setMessages(data);
         setSessionId(id);
       } else {
         startNewChat();
         setSessionId(id);
       }
-    } catch (e) { console.error("Failed to load chat"); }
+    } catch (e) { console.error("Failed to load chat", e.message); }
   };
 
   const deleteChat = async (e, id) => {
     e.stopPropagation();
-    const token = sessionStorage.getItem('access_token');
-    if (!token) return router.push('/login');
-    
     try {
-      await fetch(`${API_BASE}/sessions/${id}`, { 
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      await apiFetch(`/sessions/${id}`, { method: 'DELETE' });
       if (sessionId === id) startNewChat();
       fetchSessions();
-    } catch (e) { console.error("Failed to delete"); }
+    } catch (e) { console.error("Failed to delete", e.message); }
   };
 
   const handleSend = async (textToSend) => {
@@ -182,32 +199,19 @@ export default function ChatPage() {
     setIsLoading(true);
 
     try {
-      const token = sessionStorage.getItem('access_token');
-      if (!token) return router.push('/login');
-
-      const response = await fetch(`${API_BASE}/chat`, {
+      const response = await apiFetch('/chat', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}` 
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: sessionId, message: messageText })
       });
 
       if (response.status === 429) {
-        setMessages(prev => [...prev, {
-          role: "assistant",
-          content: "Too many messages. Please wait a moment before sending another."
-        }]);
+        setMessages(prev => [...prev, { role: "assistant", content: "Too many messages. Please wait a moment before sending another." }]);
         setIsLoading(false);
         return;
       }
 
-      if (response.status === 401) { 
-        router.push('/login'); 
-        return; 
-      }
-
+      if (response.status === 401) { router.push('/login'); return; }
       if (!response.ok) throw new Error('Network response was not ok');
       
       const data = await response.json();
@@ -216,7 +220,7 @@ export default function ChatPage() {
       setIsLoading(false);
       setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
       
-      const fullText = data.reply;
+      const fullText = data.reply || '';
       let currentIndex = 0;
       let typedText = "";
       
@@ -224,13 +228,9 @@ export default function ChatPage() {
         if (currentIndex < fullText.length) {
           typedText += fullText.substring(currentIndex, currentIndex + 2);
           currentIndex += 2;
-          
           setMessages((prev) => {
             const newMessages = [...prev];
-            newMessages[newMessages.length - 1] = {
-              role: 'assistant',
-              content: typedText
-            };
+            newMessages[newMessages.length - 1] = { role: 'assistant', content: typedText };
             return newMessages;
           });
         } else {
@@ -240,7 +240,7 @@ export default function ChatPage() {
       }, 15);
 
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Error sending message:', error);
       setIsLoading(false);
       setMessages((prev) => [...prev, { role: 'assistant', content: "Sorry, I'm having trouble connecting to the server." }]);
     }
@@ -253,7 +253,6 @@ export default function ChatPage() {
 
   return (
     <div className="app">
-      {/* SIDEBAR */}
       <div className="sidebar">
         <div className="sidebar-header">
           <div className="logo">
@@ -265,24 +264,12 @@ export default function ChatPage() {
           </div>
         </div>
         
-        {/* Navigation Wrapper */}
         <div className="sidebar-nav" style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '12px' }}>
-          {/* My Tickets Link */}
-          <Link 
-            href="/tickets" 
-            className="new-chat-btn" 
-            style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}
-          >
+          <Link href="/tickets" className="new-chat-btn" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
             <IconTicket size={14} /> My Tickets
           </Link>
-
-          {/* Admin Dashboard Link */}
           {isAdmin && (
-            <Link 
-              href="/admin" 
-              className="new-chat-btn" 
-              style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}
-            >
+            <Link href="/admin" className="new-chat-btn" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
               <IconShield size={14} /> Admin Dashboard
             </Link>
           )}
@@ -290,24 +277,14 @@ export default function ChatPage() {
 
         <div className="section-label">Recent</div>
         
-        {/* DYNAMIC CHAT LIST */}
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {chatSessions.map((chat) => (
-            <div 
-              key={chat.id} 
-              className={`chat-item ${sessionId === chat.id ? 'active' : ''}`}
-              onClick={() => loadChat(chat.id)}
-              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-            >
+            <div key={chat.id} className={`chat-item ${sessionId === chat.id ? 'active' : ''}`} onClick={() => loadChat(chat.id)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ display: 'flex', alignItems: 'center', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 <IconMessage2 size={13} style={{ marginRight: '6px', flexShrink: 0 }} />
                 {chat.title}
               </span>
-              <IconTrash 
-                size={14} 
-                style={{ marginLeft: '8px', opacity: 0.5, cursor: 'pointer', flexShrink: 0 }} 
-                onClick={(e) => deleteChat(e, chat.id)}
-              />
+              <IconTrash size={14} style={{ marginLeft: '8px', opacity: 0.5, cursor: 'pointer', flexShrink: 0 }} onClick={(e) => deleteChat(e, chat.id)} />
             </div>
           ))}
         </div>
@@ -328,53 +305,26 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {/* CHAT AREA */}
       <div className="chat-area">
-        {/* DYNAMIC UPDATED HEADER WITH DROPDOWN PANEL */}
         <div className="chat-header" style={{ position: 'relative' }}>
           <div className="chat-title">Technical Support</div>
-          
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            {/* Notification Bell */}
             <div style={{ position: 'relative' }}>
-              <button 
-                onClick={() => setShowNotifs(!showNotifs)}
-                style={{ background: 'transparent', border: 'none', cursor: 'pointer', position: 'relative' }}
-              >
+              <button onClick={() => setShowNotifs(!showNotifs)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', position: 'relative' }}>
                 <IconBell size={20} color="#1A1A1A" />
                 {notifications.filter(n => !n.is_read).length > 0 && (
-                  <span style={{
-                    position: 'absolute', top: '-2px', right: '-2px', width: '8px', height: '8px',
-                    borderRadius: '50%', background: '#FF6B00', border: '1px solid #fff'
-                  }}></span>
+                  <span style={{ position: 'absolute', top: '-2px', right: '-2px', width: '8px', height: '8px', borderRadius: '50%', background: '#FF6B00', border: '1px solid #fff' }}></span>
                 )}
               </button>
-              
-              {/* Dropdown Box Container */}
               {showNotifs && (
-                <div style={{
-                  position: 'absolute', top: '30px', right: '0', width: '300px',
-                  background: '#fff', borderRadius: '12px', boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
-                  border: '0.5px solid #E8E8E8', zIndex: 100, overflow: 'hidden'
-                }}>
-                  <div style={{ padding: '12px 16px', borderBottom: '0.5px solid #E8E8E8', fontWeight: 600 }}>
-                    Notifications
-                  </div>
+                <div style={{ position: 'absolute', top: '30px', right: '0', width: '300px', background: '#fff', borderRadius: '12px', boxShadow: '0 10px 30px rgba(0,0,0,0.1)', border: '0.5px solid #E8E8E8', zIndex: 100, overflow: 'hidden' }}>
+                  <div style={{ padding: '12px 16px', borderBottom: '0.5px solid #E8E8E8', fontWeight: 600 }}>Notifications</div>
                   <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
                     {notifications.length === 0 ? (
                       <p style={{ padding: '16px', fontSize: '13px', color: '#888', textAlign: 'center' }}>No notifications</p>
                     ) : (
                       notifications.map(n => (
-                        <div 
-                          key={n.id} 
-                          onClick={() => !n.is_read && handleMarkRead(n.id)}
-                          style={{ 
-                            padding: '12px 16px', 
-                            borderBottom: '0.5px solid #F7F7F7', 
-                            cursor: n.is_read ? 'default' : 'pointer',
-                            background: n.is_read ? '#fff' : '#FFF3EB'
-                          }}
-                        >
+                        <div key={n.id} onClick={() => !n.is_read && handleMarkRead(n.id)} style={{ padding: '12px 16px', borderBottom: '0.5px solid #F7F7F7', cursor: n.is_read ? 'default' : 'pointer', background: n.is_read ? '#fff' : '#FFF3EB' }}>
                           <p style={{ fontSize: '13px', color: '#1A1A1A', marginBottom: '4px' }}>{n.message}</p>
                           <span style={{ fontSize: '11px', color: '#AAA' }}>{n.time}</span>
                         </div>
@@ -384,23 +334,12 @@ export default function ChatPage() {
                 </div>
               )}
             </div>
-
             <div className="status-pill"><div className="dot"></div> Online</div>
           </div>
         </div>
 
-        {/* OUTAGE ALERT BANNER CONTAINER */}
         {activeOutages.length > 0 && (
-          <div style={{ 
-            margin: '16px 20px 0', 
-            padding: '12px 16px', 
-            background: '#FFF3EB', 
-            border: '1px solid #FF6B00', 
-            borderRadius: '12px', 
-            display: 'flex', 
-            alignItems: 'flex-start', 
-            gap: '12px' 
-          }}>
+          <div style={{ margin: '16px 20px 0', padding: '12px 16px', background: '#FFF3EB', border: '1px solid #FF6B00', borderRadius: '12px', display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
             <IconAlertTriangle size={20} color="#FF6B00" style={{ flexShrink: 0, marginTop: '2px' }} />
             <div>
               <h4 style={{ fontSize: '14px', fontWeight: 600, color: '#1A1A1A', marginBottom: '4px' }}>Active Outages in Your Area</h4>
@@ -421,13 +360,8 @@ export default function ChatPage() {
               </div>
               <div>
                 <div className={`bubble ${msg.role === 'user' ? 'user-bubble' : 'bot-bubble'}`}>
-                  {msg.role === 'user' ? (
-                    msg.content
-                  ) : (
-                    <ReactMarkdown>{msg.content}</ReactMarkdown>
-                  )}
+                  {msg.role === 'user' ? ( msg.content ) : ( <ReactMarkdown>{msg.content}</ReactMarkdown> )}
                 </div>
-                
                 {index === 0 && msg.role === 'assistant' && sessionId === null && (
                   <div className="quick-chips">
                     <div className="chip" onClick={() => handleSend('Internet not working')}>Internet not working</div>
@@ -439,33 +373,40 @@ export default function ChatPage() {
               </div>
             </div>
           ))}
-
           {isLoading && (
             <div className="msg">
               <div className="msg-avatar bot-avatar"><IconRobot size={13} /></div>
               <div className="typing"><span></span><span></span><span></span></div>
             </div>
           )}
-          
           <div ref={messagesEndRef} />
         </div>
 
         <div className="input-area">
           <div className="input-row">
-            <input 
-              type="text" 
-              placeholder="Describe your issue..." 
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              disabled={isLoading}
-            />
-            <button className="send-btn" onClick={() => handleSend()} disabled={isLoading}>
-              <IconSend size={15} />
-            </button>
+            <input type="text" placeholder="Describe your issue..." value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} disabled={isLoading} />
+            <button className="send-btn" onClick={() => handleSend()} disabled={isLoading}><IconSend size={15} /></button>
           </div>
         </div>
       </div>
+
+      {pendingFeedback && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#fff', padding: '32px', borderRadius: '16px', width: '400px', textAlign: 'center' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px' }}>Rate your experience</h3>
+            <p style={{ fontSize: '14px', color: '#888', marginBottom: '24px' }}>How satisfied were you with the support for ticket {pendingFeedback.ticket_id}?</p>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: '24px' }}>
+              {[1, 2, 3, 4, 5].map(i => (
+                <button key={i} onClick={() => setRating(i)} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}>
+                  <IconStar size={32} color={i <= rating ? '#FF6B00' : '#E0E0E0'} fill={i <= rating ? '#FF6B00' : 'none'} />
+                </button>
+              ))}
+            </div>
+            <textarea placeholder="Optional comment..." value={comment} onChange={(e) => setComment(e.target.value)} style={{ width: '100%', padding: '12px', marginBottom: '24px', border: '0.5px solid #E0E0E0', borderRadius: '8px', minHeight: '80px', resize: 'none', boxSizing: 'border-box' }} />
+            <button onClick={submitFeedback} style={{ width: '100%', padding: '12px', background: '#FF6B00', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 500 }}>Submit Feedback</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

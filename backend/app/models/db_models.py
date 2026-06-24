@@ -1,8 +1,7 @@
-# backend/app/models/db_models.py
 from sqlalchemy import Column, String, DateTime, Text, ForeignKey, Boolean, Float, Integer, Date
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
-from datetime import datetime, date
+from datetime import datetime
 from app.database import Base
 
 class User(Base):
@@ -10,7 +9,7 @@ class User(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     account_number = Column(String(20), unique=True, index=True)
     name = Column(String(100))
-    email = Column(String(100), unique=True, index=True) # NEW
+    email = Column(String(100), unique=True, index=True)
     hashed_pin = Column(String(100))
     plan = Column(String(50), default="Fiber 100")
     balance = Column(Float, default=0.0)
@@ -18,14 +17,6 @@ class User(Base):
     address = Column(String(200), default="Unknown Address")
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
-
-class Notification(Base):
-    __tablename__ = "notifications" # NEW TABLE
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    message = Column(Text, nullable=False)
-    is_read = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
 
 class Outage(Base):
     __tablename__ = "outages"
@@ -39,7 +30,7 @@ class Technician(Base):
     __tablename__ = "technicians"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(50))
-    daily_capacity = Column(Integer, default=3) # Max visits per day
+    daily_capacity = Column(Integer, default=3)
 
 class TechnicianVisit(Base):
     __tablename__ = "technician_visits"
@@ -48,7 +39,7 @@ class TechnicianVisit(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     technician_id = Column(UUID(as_uuid=True), ForeignKey("technicians.id"), nullable=False)
     scheduled_date = Column(Date, nullable=False)
-    time_slot = Column(String(20), nullable=False) # morning, afternoon, evening
+    time_slot = Column(String(20), nullable=False)
     status = Column(String(20), default="scheduled")
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -76,13 +67,63 @@ class Ticket(Base):
     transcript = Column(Text, default="")
     status = Column(String(20), default="open")
     created_at = Column(DateTime, default=datetime.utcnow)
-    
+
 class SessionSummary(Base):
     __tablename__ = "session_summaries"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     session_id = Column(UUID(as_uuid=True), ForeignKey("chat_sessions.id"), nullable=False)
     summary = Column(Text, nullable=False)
-    status = Column(String(20), default="resolved") # resolved/unresolved
+    status = Column(String(20), default="resolved")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    message = Column(Text, nullable=False)
+    is_read = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class KBMiss(Base):
+    __tablename__ = "kb_misses"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True) # Nullable for unauthenticated paths
+    query = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    token_hash = Column(String, nullable=False, unique=True)  # store hash not plaintext
+    expires_at = Column(DateTime, nullable=False)
+    revoked = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     
+class KBHit(Base):
+    __tablename__ = "kb_hits"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    session_id = Column(UUID(as_uuid=True), ForeignKey("chat_sessions.id"), nullable=False)
+    chunk_text = Column(Text, nullable=False)
+    topic = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class Feedback(Base):
+    __tablename__ = "feedback"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    session_id = Column(UUID(as_uuid=True), ForeignKey("chat_sessions.id"), nullable=False)
+    ticket_id = Column(String, ForeignKey("tickets.id"), nullable=False)
+    rating = Column(Integer, nullable=False)
+    comment = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class FlaggedKBChunk(Base):
+    __tablename__ = "flagged_kb_chunks"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    feedback_id = Column(UUID(as_uuid=True), ForeignKey("feedback.id"), nullable=False)
+    chunk_text = Column(Text, nullable=False)
+    topic = Column(String, nullable=False)
+    reviewed = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)

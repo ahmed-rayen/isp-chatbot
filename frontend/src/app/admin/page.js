@@ -3,12 +3,21 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { IconArrowLeft, IconShield, IconHistory, IconChevronDown, IconChevronUp, IconAlertTriangle, IconCheck } from '@tabler/icons-react';
+import { 
+  IconArrowLeft, 
+  IconShield, 
+  IconHistory, 
+  IconChevronDown, 
+  IconChevronUp, 
+  IconAlertTriangle, 
+  IconCheck 
+} from '@tabler/icons-react';
 
 export default function AdminDashboard() {
   const router = useRouter();
   const [tickets, setTickets] = useState([]);
   const [outages, setOutages] = useState([]);
+  const [flaggedChunks, setFlaggedChunks] = useState([]); // New state for flagged KB chunks
   const [isLoading, setIsLoading] = useState(true);
   const [expandedTicket, setExpandedTicket] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -33,10 +42,11 @@ export default function AdminDashboard() {
       try {
         const headers = { 'Authorization': `Bearer ${token}` };
         
-        const [ticketsRes, techsRes, outagesRes] = await Promise.all([
+        const [ticketsRes, techsRes, outagesRes, flaggedRes] = await Promise.all([
           fetch(`${API_BASE}/admin/tickets`, { headers }),
           fetch(`${API_BASE}/admin/technicians`, { headers }),
-          fetch(`${API_BASE}/admin/outages`, { headers })
+          fetch(`${API_BASE}/admin/outages`, { headers }),
+          fetch(`${API_BASE}/admin/flagged-chunks`, { headers }) // Fetch flagged low-rating chunks
         ]);
 
         if (ticketsRes.status === 401 || ticketsRes.status === 403) { router.push('/login'); return; }
@@ -44,6 +54,7 @@ export default function AdminDashboard() {
         setTickets(await ticketsRes.json());
         setTechnicians(await techsRes.json());
         setOutages(await outagesRes.json());
+        if (flaggedRes.ok) setFlaggedChunks(await flaggedRes.json());
       } catch (e) { 
         console.error("Failed to load admin data:", e); 
       } finally { 
@@ -53,6 +64,19 @@ export default function AdminDashboard() {
     
     fetchAdminData();
   }, [router, API_BASE]);
+
+  // Handler function to clear reviewed flagged chunks
+  const handleReviewChunk = async (id) => {
+    try {
+      await fetch(`${API_BASE}/admin/flagged-chunks/${id}/review`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${sessionStorage.getItem('access_token')}` }
+      });
+      setFlaggedChunks(prev => prev.filter(c => c.id !== id));
+    } catch (e) {
+      console.error("Failed to mark chunk as reviewed:", e);
+    }
+  };
 
   // Handler function to update ticket statuses
   const handleUpdateStatus = async (ticketId, newStatus) => {
@@ -145,9 +169,8 @@ export default function AdminDashboard() {
   const lightGreyText = "#888";
 
   return (
-    <div style={{ background: '#f0f2f5', minHeight: '100vh', padding: '40px' }}>
+    <div style={{ background: '#f0f2f5', height: '100vh', overflowY: 'auto', padding: '40px' }}>
       <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
-        
         {/* HEADER */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '32px' }}>
           <Link href="/" style={{ color: lightGreyText }}>
@@ -213,6 +236,25 @@ export default function AdminDashboard() {
                       Delete
                     </button>
                   </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* FLAGGED KB CHUNKS SECTION */}
+        {!isLoading && flaggedChunks.length > 0 && (
+          <div style={{ background: whiteBg, padding: '24px', borderRadius: '16px', border: '0.5px solid #E8E8E8', marginBottom: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+              <IconAlertTriangle size={20} color="#D32F2F" />
+              <h2 style={{ fontSize: '18px', fontWeight: 600, color: darkBg }}>Flagged KB Chunks (Low Rating)</h2>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {flaggedChunks.map(c => (
+                <div key={c.id} style={{ padding: '16px', borderRadius: '8px', background: '#FFF0F0', border: '1px solid #FFCDD2' }}>
+                  <span style={{ fontSize: '12px', color: '#D32F2F', fontWeight: 600, textTransform: 'uppercase' }}>{c.topic}</span>
+                  <p style={{ fontSize: '13px', color: '#555', marginTop: '4px', marginBottom: '12px' }}>{c.chunk_text}</p>
+                  <button onClick={() => handleReviewChunk(c.id)} style={{ padding: '6px 12px', background: '#fff', border: '1px solid #D32F2F', color: '#D32F2F', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>Mark Reviewed</button>
                 </div>
               ))}
             </div>

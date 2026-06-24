@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from app.database import get_db
-from app.models.db_models import User, Ticket, TechnicianVisit, Technician, Outage
+from app.models.db_models import User, Ticket, TechnicianVisit, Technician, Outage,Notification, FlaggedKBChunk
 from app.routers.auth import get_current_user
 from datetime import date
 from sqlalchemy import func
@@ -66,9 +66,31 @@ def update_ticket_status(ticket_id: str, payload: TicketUpdate, db: Session = De
         raise HTTPException(status_code=404, detail="Ticket not found")
     
     ticket.status = payload.status
+    
+    # TRIGGER NOTIFICATION ON RESOLVE
+    if payload.status == "resolved":
+        notif = Notification(
+            user_id=ticket.user_id,
+            message=f"Your issue ({ticket.id}) has been resolved. Please rate your experience."
+        )
+        db.add(notif)
+        
     db.commit()
     return {"status": "updated", "ticket_id": ticket.id, "new_status": ticket.status}
+@router.get("/flagged-chunks")
+def get_flagged_chunks(db: Session = Depends(get_db), admin: User = Depends(admin_required)):
+    chunks = db.query(FlaggedKBChunk).filter(FlaggedKBChunk.reviewed == False).all()
+    return [{"id": str(c.id), "chunk_text": c.chunk_text, "topic": c.topic} for c in chunks]
 
+# NEW: Mark Flagged Chunk as Reviewed
+@router.patch("/flagged-chunks/{chunk_id}/review")
+def review_chunk(chunk_id: str, db: Session = Depends(get_db), admin: User = Depends(admin_required)):
+    chunk = db.query(FlaggedKBChunk).filter(FlaggedKBChunk.id == chunk_id).first()
+    if not chunk:
+        raise HTTPException(status_code=404, detail="Chunk not found")
+    chunk.reviewed = True
+    db.commit()
+    return {"status": "reviewed"}
 # --- NEW: Reschedule Technician Visit ---
 @router.patch("/visits/{ticket_id}")
 def update_visit(ticket_id: str, payload: VisitUpdate, db: Session = Depends(get_db), admin: User = Depends(admin_required)):

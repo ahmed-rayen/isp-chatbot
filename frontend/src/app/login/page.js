@@ -1,7 +1,8 @@
 'use client';
-import Link from 'next/link';
+
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { IconWifi, IconAlertCircle } from '@tabler/icons-react';
 
 export default function LoginPage() {
@@ -11,7 +12,8 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
-  const API_BASE = 'http://localhost:8000/api'; // Or your .env variable
+  // Define API_BASE here!
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -19,9 +21,11 @@ export default function LoginPage() {
     setError('');
 
     try {
+      // 1. Use RAW fetch, NOT apiFetch, for login
       const response = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // Must be included to get the httpOnly refresh cookie!
         body: JSON.stringify({ account_number: accountNumber, pin: pin })
       });
 
@@ -31,15 +35,14 @@ export default function LoginPage() {
         throw new Error(data.detail || 'Login failed');
       }
 
-      // Save token and user info to sessionStorage
-      // (Using sessionStorage so it clears when they close the tab)
+      // 2. Save access token and user info
       sessionStorage.setItem('access_token', data.access_token);
       sessionStorage.setItem('user_name', data.user.name);
       sessionStorage.setItem('user_plan', data.user.plan);
       sessionStorage.setItem('user_account', data.user.account_number);
       sessionStorage.setItem('is_admin', data.user.is_admin);
 
-      // Redirect to the main chat page
+      // 3. Redirect to the main chat page
       router.push('/');
       
     } catch (err) {
@@ -133,6 +136,7 @@ export default function LoginPage() {
             {isLoading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
+
         <p style={{ textAlign: 'center', marginTop: '20px', fontSize: '13px', color: '#888' }}>
           Don&apos;t have an account? <Link href="/signup" style={{ color: '#FF6B00', textDecoration: 'none', fontWeight: 500 }}>Sign up</Link>
         </p>

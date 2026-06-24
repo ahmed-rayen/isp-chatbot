@@ -8,8 +8,9 @@ from app.routers import chat, auth          # Added auth
 from app.database import engine, Base, SessionLocal  # Added SessionLocal
 from app.models import db_models
 from app.services.auth import hash_password # Added hash_password
-from app.routers import chat, auth, tickets, admin, notifications
-
+from app.routers import chat, auth, tickets, admin, notifications, feedback
+from app.limiter import limiter
+from app.middleware import AttachUserMiddleware
 # Create tables
 Base.metadata.create_all(bind=engine)
 
@@ -68,13 +69,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
+app.add_middleware(AttachUserMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "https://*.vercel.app"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 # Register routers
 app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
 app.include_router(chat.router, prefix="/api", tags=["Chat"])
 app.include_router(tickets.router, prefix="/api", tags=["Tickets"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 app.include_router(notifications.router, prefix="/api", tags=["Notifications"])
+app.include_router(feedback.router, prefix="/api", tags=["Feedback"])
 @app.get("/")
 def root():
     return {"status": "ok", "service": "ISP Chatbot API"}
