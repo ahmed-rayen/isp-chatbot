@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.db_models import User, Ticket, TechnicianVisit, Feedback, TicketComment, Notification,Technician
 from app.routers.auth import get_current_user
+from app.ticket_ws_manager import ticket_manager
 from pydantic import BaseModel
 from app.database import get_db
 
@@ -73,26 +74,22 @@ async def get_ticket_comments(ticket_id: str, db: Session = Depends(get_db), cur
         })
     return result
 
-# NEW: Post a comment (Accessible by Client and Tech)
 @router.post("/tickets/{ticket_id}/comments")
 async def add_ticket_comment(ticket_id: str, payload: CommentRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     ticket = db.query(Ticket).filter(Ticket.id == ticket_id.upper()).first()
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
         
-    # Admins supervise but don't chat. Only Client or assigned Tech can post.
     if current_user.is_admin:
         raise HTTPException(status_code=403, detail="Admins cannot reply to tickets directly.")
         
     comment = TicketComment(ticket_id=ticket.id, user_id=current_user.id, content=payload.content)
     db.add(comment)
     
-    # Notify the other party
+    # Notify the other party (REST notification)
     if current_user.is_technician:
-        # Tech replied -> Notify Client
-        db.add(Notification(user_id=ticket.user_id, message=f"New update on your ticket {ticket.id}: {payload.content[:50]}..."))
+        db.add(Notification(user_id=ticket.user_id, message=f"New update on ticket {ticket.id}: {payload.content[:50]}..."))
     else:
-        # Client replied -> Notify Tech
         visit = db.query(TechnicianVisit).filter(TechnicianVisit.ticket_id == ticket.id).first()
         if visit:
             tech_user = db.query(User).filter(User.technician_id == visit.technician_id).first()
@@ -100,4 +97,13 @@ async def add_ticket_comment(ticket_id: str, payload: CommentRequest, db: Sessio
                 db.add(Notification(user_id=tech_user.id, message=f"New message on ticket {ticket.id}: {payload.content[:50]}..."))
                 
     db.commit()
+    
+    # BROADCAST OVER WEBSOCKET
+    await ticket_manager.broadcast_to_ticket(ticket.id, {
+        "content": payload.content,
+        "time": comment.created_at.strftime("%Y-%m-%d %H:%M"),
+        "sender_name": current_user.name,
+        "sender_role": "Technician" if current_user.is_technician else "Client"
+    })
+    
     return {"status": "comment_added"}

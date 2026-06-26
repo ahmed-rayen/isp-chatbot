@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
@@ -25,8 +25,10 @@ export default function TechnicianDashboard() {
   const [expandedTicket, setExpandedTicket] = useState(null);
   const [comments, setComments] = useState({});
   const [newComment, setNewComment] = useState('');
+  const wsRef = useRef(null); // WebSocket reference
 
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+  const WS_BASE = API_BASE.replace('http', 'ws').replace('/api', ''); // e.g., ws://localhost:8000
 
   useEffect(() => {
     const token = sessionStorage.getItem('access_token');
@@ -53,6 +55,29 @@ export default function TechnicianDashboard() {
     fetchData();
   }, [router, API_BASE]);
 
+  // WEBSOCKET LOGIC: Connect when ticket expanded, disconnect when collapsed
+  useEffect(() => {
+    if (!expandedTicket) return;
+    
+    const token = sessionStorage.getItem('access_token');
+    const ws = new WebSocket(`${WS_BASE}/api/ws/tickets/${expandedTicket}?token=${token}`);
+    wsRef.current = ws;
+    
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      setComments(prev => ({
+        ...prev,
+        [expandedTicket]: [...(prev[expandedTicket] || []), data]
+      }));
+    };
+
+    return () => {
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.close();
+      }
+    };
+  }, [expandedTicket, WS_BASE]);
+
   const fetchComments = async (ticketId) => {
     try {
       const res = await apiFetch(`${API_BASE}/tickets/${ticketId}/comments`);
@@ -65,15 +90,25 @@ export default function TechnicianDashboard() {
 
   const handleAddComment = async (ticketId) => {
     if (!newComment.trim()) return;
+    const tempComment = newComment;
+    setNewComment(''); // Clear input immediately for UX
+    
     try {
+      // Send via REST. Backend will save it and broadcast it over WS.
       await apiFetch(`${API_BASE}/tickets/${ticketId}/comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: newComment })
+        body: JSON.stringify({ content: tempComment })
       });
-      setNewComment('');
-      fetchComments(ticketId);
+      // No need to fetchComments, the WebSocket will push the saved message automatically
     } catch (e) { console.error("Failed to send message"); }
+  };
+
+  const handleKeyDown = (e, ticketId) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleAddComment(ticketId);
+    }
   };
 
   const handleResolve = async (ticketId) => {
@@ -189,6 +224,7 @@ export default function TechnicianDashboard() {
                         placeholder="Type a response to your client..." 
                         value={newComment} 
                         onChange={(e) => setNewComment(e.target.value)}
+                        onKeyDown={(e) => handleKeyDown(e, ticket.ticket_id)}
                         style={{ flex: 1, padding: '12px', fontSize: '14px', border: '0.5px solid #E0E0E0', borderRadius: '8px' }}
                       />
                       <button 

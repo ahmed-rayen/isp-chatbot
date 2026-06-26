@@ -8,7 +8,7 @@ from app.routers import chat, auth          # Added auth
 from app.database import engine, Base, SessionLocal  # Added SessionLocal
 from app.models import db_models
 from app.services.auth import hash_password # Added hash_password
-from app.routers import chat, auth, tickets, admin, notifications, feedback, technician
+from app.routers import chat, auth, tickets, admin, notifications, feedback, technician,ws
 from app.limiter import limiter
 from app.middleware import AttachUserMiddleware
 # Create tables
@@ -100,6 +100,7 @@ app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 app.include_router(notifications.router, prefix="/api", tags=["Notifications"])
 app.include_router(feedback.router, prefix="/api", tags=["Feedback"])
 app.include_router(technician.router, prefix="/api/technician", tags=["Technician"])
+app.include_router(ws.router, prefix="/api", tags=["WebSockets"])
 @app.get("/")
 def root():
     return {"status": "ok", "service": "ISP Chatbot API"}
