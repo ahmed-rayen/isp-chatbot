@@ -16,7 +16,9 @@ class User(Base):
     due_date = Column(String(20), default="N/A")
     address = Column(String(200), default="Unknown Address")
     is_active = Column(Boolean, default=True)
-    is_admin = Column(Boolean, default=False)
+    is_admin = Column(Boolean, default=False) 
+    is_technician = Column(Boolean, default=False) # NEW
+    technician_id = Column(UUID(as_uuid=True), ForeignKey("technicians.id"), nullable=True)
 
 class Outage(Base):
     __tablename__ = "outages"
@@ -66,6 +68,16 @@ class Ticket(Base):
     issue_summary = Column(Text, nullable=False)
     transcript = Column(Text, default="")
     status = Column(String(20), default="open")
+    is_deleted = Column(Boolean, default=False) # NEW: Soft delete for admin
+    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class TicketComment(Base):
+    __tablename__ = "ticket_comments" # NEW TABLE
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    ticket_id = Column(String, ForeignKey("tickets.id"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    content = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class SessionSummary(Base):

@@ -2,6 +2,7 @@
 import { apiFetch } from './lib/api';
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { IconTools } from '@tabler/icons-react';
 import ReactMarkdown from 'react-markdown';
 import { 
   IconWifi, 
@@ -32,6 +33,7 @@ export default function ChatPage() {
   const [userName, setUserName] = useState('');
   const [userAccount, setUserAccount] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isTech, setIsTech] = useState(false);
   
   const [activeOutages, setActiveOutages] = useState([]);
   const [notifications, setNotifications] = useState([]);
@@ -57,7 +59,7 @@ export default function ChatPage() {
     setUserName(sessionStorage.getItem('user_name') || 'User');
     setUserAccount(sessionStorage.getItem('user_account') || '0000');
     setIsAdmin(sessionStorage.getItem('is_admin') === 'true');
-    
+    setIsTech(sessionStorage.getItem('is_technician') === 'true'); // NEW
     fetchSessions();
 
     const fetchOutages = async () => {
@@ -268,8 +270,23 @@ export default function ChatPage() {
           <Link href="/tickets" className="new-chat-btn" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
             <IconTicket size={14} /> My Tickets
           </Link>
+          {isTech && (
+            <Link 
+              href="/technician" 
+              className="new-chat-btn" 
+              style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}
+            >
+              <IconTools size={14} /> Technician Dashboard
+            </Link>
+          )}
+
+          {/* Admin Dashboard Link */}
           {isAdmin && (
-            <Link href="/admin" className="new-chat-btn" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
+            <Link 
+              href="/admin" 
+              className="new-chat-btn" 
+              style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}
+            >
               <IconShield size={14} /> Admin Dashboard
             </Link>
           )}

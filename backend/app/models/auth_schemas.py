@@ -15,6 +15,7 @@ class UserOut(BaseModel):
     name: str
     plan: str
     is_admin: bool = False 
+    is_technician: bool = False
 
 class TokenResponse(BaseModel):
     access_token: str

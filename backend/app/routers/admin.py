@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from app.database import get_db
-from app.models.db_models import User, Ticket, TechnicianVisit, Technician, Outage,Notification, FlaggedKBChunk
+from app.models.db_models import User, Ticket, TechnicianVisit, Technician, Outage,Notification, FlaggedKBChunk, TicketComment
 from app.routers.auth import get_current_user
 from datetime import date
 from sqlalchemy import func
@@ -114,19 +114,37 @@ def get_technicians(db: Session = Depends(get_db), admin: User = Depends(admin_r
     techs = db.query(Technician).all()
     return [{"id": str(t.id), "name": t.name, "capacity": t.daily_capacity} for t in techs]
 
-@router.delete("/tickets/{ticket_id}")
-def delete_ticket(ticket_id: str, db: Session = Depends(get_db), admin: User = Depends(admin_required)):
+@router.patch("/tickets/{ticket_id}/archive")
+def archive_ticket(ticket_id: str, db: Session = Depends(get_db), admin: User = Depends(admin_required)):
     ticket = db.query(Ticket).filter(Ticket.id == ticket_id.upper()).first()
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
-    
-    # 1. Delete associated technician visit first (Foreign Key constraint)
-    db.query(TechnicianVisit).filter(TechnicianVisit.ticket_id == ticket.id).delete()
-    
-    # 2. Delete the ticket
-    db.delete(ticket)
+    ticket.is_deleted = True # Soft delete!
     db.commit()
-    return {"status": "deleted"}
+    return {"status": "archived"}
+
+class CommentRequest(BaseModel):
+    content: str
+
+@router.post("/tickets/{ticket_id}/comments")
+def add_comment(ticket_id: str, payload: CommentRequest, db: Session = Depends(get_db), admin: User = Depends(admin_required)):
+    ticket = db.query(Ticket).filter(Ticket.id == ticket_id.upper()).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+        
+    comment = TicketComment(ticket_id=ticket.id, user_id=admin.id, content=payload.content)
+    db.add(comment)
+    
+    # Notify the client
+    notif = Notification(user_id=ticket.user_id, message=f"New message on your ticket {ticket.id}: {payload.content[:50]}...")
+    db.add(notif)
+    db.commit()
+    return {"status": "comment_added"}
+
+@router.get("/tickets/{ticket_id}/comments")
+def get_comments(ticket_id: str, db: Session = Depends(get_db), admin: User = Depends(admin_required)):
+    comments = db.query(TicketComment).filter(TicketComment.ticket_id == ticket_id.upper()).order_by(TicketComment.created_at).all()
+    return [{"content": c.content, "time": c.created_at.strftime("%Y-%m-%d %H:%M")} for c in comments]
 
 @router.get("/outages")
 def get_outages(db: Session = Depends(get_db), admin: User = Depends(admin_required)):
@@ -173,3 +191,18 @@ def delete_outage(city: str, db: Session = Depends(get_db), admin: User = Depend
     outage.is_active = False
     db.commit()
     return {"status": "deleted"}
+
+@router.get("/stats")
+def get_admin_stats(db: Session = Depends(get_db), admin: User = Depends(admin_required)):
+    total_tickets = db.query(Ticket).count()
+    resolved_tickets = db.query(Ticket).filter(Ticket.status == "resolved").count()
+    open_tickets = db.query(Ticket).filter(Ticket.status == "open").count()
+    active_outages = db.query(Outage).filter(Outage.is_active == True, Outage.is_deleted == False).count()
+    
+    return {
+        "total_tickets": total_tickets,
+        "resolved_tickets": resolved_tickets,
+        "open_tickets": open_tickets,
+        "active_outages": active_outages,
+        "resolution_rate": round((resolved_tickets / total_tickets * 100), 1) if total_tickets > 0 else 0
+    }

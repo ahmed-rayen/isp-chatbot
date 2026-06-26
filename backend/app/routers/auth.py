@@ -54,6 +54,8 @@ def register(request: Request, payload: RegisterRequest, db: Session = Depends(g
             "name": new_user.name,
             "plan": new_user.plan,
             "is_admin": new_user.is_admin
+            
+            
         }
     }
 
@@ -88,7 +90,8 @@ def login(request: Request, response: Response, payload: LoginRequest, db: Sessi
             "account_number": user.account_number,
             "name": user.name,
             "plan": user.plan,
-            "is_admin": user.is_admin
+            "is_admin": user.is_admin,
+            "is_technician": user.is_technician
         }
     }
 

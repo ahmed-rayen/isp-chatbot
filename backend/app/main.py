@@ -8,7 +8,7 @@ from app.routers import chat, auth          # Added auth
 from app.database import engine, Base, SessionLocal  # Added SessionLocal
 from app.models import db_models
 from app.services.auth import hash_password # Added hash_password
-from app.routers import chat, auth, tickets, admin, notifications, feedback
+from app.routers import chat, auth, tickets, admin, notifications, feedback, technician
 from app.limiter import limiter
 from app.middleware import AttachUserMiddleware
 # Create tables
@@ -36,11 +36,26 @@ if not db.query(db_models.Outage).first():
     print("✅ Mock outages seeded")
 #techniciens
 if not db.query(db_models.Technician).first():
-    db.add(db_models.Technician(name="Karim", daily_capacity=3))
-    db.add(db_models.Technician(name="Sami", daily_capacity=2))
+    tech1 = db_models.Technician(name="Karim", daily_capacity=3)
+    tech2 = db_models.Technician(name="Sami", daily_capacity=2)
+    db.add_all([tech1, tech2])
+    db.commit()
     print("✅ Mock technicians seeded")
+
+if not db.query(db_models.User).filter(db_models.User.account_number == "1111").first():
+    tech_user = db_models.User(
+        account_number="1111",
+        name="Karim (Tech)",
+        email="tech@example.com",
+        hashed_pin=hash_password("1234"),
+        plan="Staff",
+        is_technician=True,
+        technician_id=tech1.id # Link to Karim
+    )
+    db.add(tech_user)
+    print("✅ Mock technician user created (Account: 1111, PIN: 1234)")
 db.commit()
-db.close()
+
 if not db.query(db_models.User).filter(db_models.User.is_admin == True).first():
     admin_user = db_models.User(
         account_number="0000",
@@ -84,6 +99,7 @@ app.include_router(tickets.router, prefix="/api", tags=["Tickets"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 app.include_router(notifications.router, prefix="/api", tags=["Notifications"])
 app.include_router(feedback.router, prefix="/api", tags=["Feedback"])
+app.include_router(technician.router, prefix="/api/technician", tags=["Technician"])
 @app.get("/")
 def root():
     return {"status": "ok", "service": "ISP Chatbot API"}

@@ -9,21 +9,28 @@ import {
   IconHistory, 
   IconChevronDown, 
   IconChevronUp, 
-  IconAlertTriangle, 
-  IconCheck 
+  IconAlertTriangle 
 } from '@tabler/icons-react';
 
 export default function AdminDashboard() {
   const router = useRouter();
   const [tickets, setTickets] = useState([]);
   const [outages, setOutages] = useState([]);
-  const [flaggedChunks, setFlaggedChunks] = useState([]); // New state for flagged KB chunks
+  const [flaggedChunks, setFlaggedChunks] = useState([]); 
   const [isLoading, setIsLoading] = useState(true);
   const [expandedTicket, setExpandedTicket] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [technicians, setTechnicians] = useState([]);
 
-  // New States for Outage Registration Fields
+  // 1. Stats state initialization
+  const [stats, setStats] = useState({ 
+    total_tickets: 0, 
+    resolved_tickets: 0, 
+    open_tickets: 0, 
+    active_outages: 0, 
+    resolution_rate: 0 
+  });
+
   const [newOutageCity, setNewOutageCity] = useState('');
   const [newOutageStatus, setNewOutageStatus] = useState('');
 
@@ -42,11 +49,13 @@ export default function AdminDashboard() {
       try {
         const headers = { 'Authorization': `Bearer ${token}` };
         
-        const [ticketsRes, techsRes, outagesRes, flaggedRes] = await Promise.all([
+        // 2. Fetch stats integrated into Promise.all setup
+        const [ticketsRes, techsRes, outagesRes, flaggedRes, statsRes] = await Promise.all([
           fetch(`${API_BASE}/admin/tickets`, { headers }),
           fetch(`${API_BASE}/admin/technicians`, { headers }),
           fetch(`${API_BASE}/admin/outages`, { headers }),
-          fetch(`${API_BASE}/admin/flagged-chunks`, { headers }) // Fetch flagged low-rating chunks
+          fetch(`${API_BASE}/admin/flagged-chunks`, { headers }),
+          fetch(`${API_BASE}/admin/stats`, { headers })
         ]);
 
         if (ticketsRes.status === 401 || ticketsRes.status === 403) { router.push('/login'); return; }
@@ -55,6 +64,7 @@ export default function AdminDashboard() {
         setTechnicians(await techsRes.json());
         setOutages(await outagesRes.json());
         if (flaggedRes.ok) setFlaggedChunks(await flaggedRes.json());
+        if (statsRes.ok) setStats(await statsRes.json());
       } catch (e) { 
         console.error("Failed to load admin data:", e); 
       } finally { 
@@ -65,7 +75,6 @@ export default function AdminDashboard() {
     fetchAdminData();
   }, [router, API_BASE]);
 
-  // Handler function to clear reviewed flagged chunks
   const handleReviewChunk = async (id) => {
     try {
       await fetch(`${API_BASE}/admin/flagged-chunks/${id}/review`, {
@@ -78,7 +87,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // Handler function to update ticket statuses
   const handleUpdateStatus = async (ticketId, newStatus) => {
     try {
       await fetch(`${API_BASE}/admin/tickets/${ticketId}`, {
@@ -90,7 +98,6 @@ export default function AdminDashboard() {
     } catch (e) { console.error("Failed to update status"); }
   };
 
-  // Handler function to reassign or reschedule visits
   const handleReschedule = async (ticketId, date, slot, techId) => {
     try {
       await fetch(`${API_BASE}/admin/visits/${ticketId}`, {
@@ -102,20 +109,19 @@ export default function AdminDashboard() {
     } catch (e) { console.error("Failed to update visit"); }
   };
 
-  // Handler function to remove ticket entries
-  const handleDeleteTicket = async (ticketId) => {
-    if (!confirm("Are you sure you want to permanently delete this ticket?")) return;
+  // 3. Updated handleArchiveTicket using reliable standard fetch routing
+  const handleArchiveTicket = async (ticketId) => {
+    if (!confirm("Archive this ticket? It will be hidden from the active list.")) return;
     try {
-      await fetch(`${API_BASE}/admin/tickets/${ticketId}`, {
-        method: 'DELETE',
+      await fetch(`${API_BASE}/admin/tickets/${ticketId}/archive`, { 
+        method: 'PATCH',
         headers: { 'Authorization': `Bearer ${sessionStorage.getItem('access_token')}` }
       });
-      setTickets(prev => prev.filter(t => t.id !== ticketId));
+      setTickets(prev => prev.filter(t => t.id !== ticketId)); 
       setExpandedTicket(null);
-    } catch (e) { console.error("Failed to delete ticket"); }
+    } catch (e) { console.error("Failed to archive"); }
   };
 
-  // Handler function to submit a newly defined regional outage
   const handleCreateOutage = async (e) => {
     e.preventDefault();
     if (!newOutageCity || !newOutageStatus) return;
@@ -126,7 +132,6 @@ export default function AdminDashboard() {
         body: JSON.stringify({ city: newOutageCity, status: newOutageStatus })
       });
       
-      // Refresh current outages list from API
       const res = await fetch(`${API_BASE}/admin/outages`, { 
         headers: { 'Authorization': `Bearer ${sessionStorage.getItem('access_token')}` } 
       });
@@ -136,7 +141,6 @@ export default function AdminDashboard() {
     } catch (e) { console.error("Failed to create outage"); }
   };
 
-  // Handler function to flip activation state on an outage tracking item
   const handleToggleOutage = async (city) => {
     try {
       const res = await fetch(`${API_BASE}/admin/outages/${city}`, {
@@ -148,7 +152,6 @@ export default function AdminDashboard() {
     } catch (e) { console.error("Failed to toggle outage"); }
   };
 
-  // Handler function to delete an active or inactive system outage
   const handleDeleteOutage = async (city) => {
     if (!confirm(`Permanently delete outage for ${city}?`)) return;
     try {
@@ -162,7 +165,6 @@ export default function AdminDashboard() {
 
   if (!isAdmin) return null;
 
-  // --- UI THEME STYLES ---
   const darkBg = "#1A1A1A";
   const orangeAccent = "#FF6B00";
   const whiteBg = "#FFFFFF";
@@ -184,7 +186,32 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* OUTAGE MANAGEMENT CARD WITH INTEGRATED FORM & GRID RECOGNITION */}
+        {/* 4. MONTHLY STATISTICS REPORT CARD */}
+        {!isLoading && (
+          <div style={{ background: darkBg, padding: '24px', borderRadius: '16px', marginBottom: '24px', color: '#fff' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px' }}>Monthly Statistics Report</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+              <div>
+                <span style={{ fontSize: '12px', color: '#AAA' }}>Total Tickets</span>
+                <h3 style={{ fontSize: '22px', fontWeight: 700 }}>{stats.total_tickets}</h3>
+              </div>
+              <div>
+                <span style={{ fontSize: '12px', color: '#AAA' }}>Open Tickets</span>
+                <h3 style={{ fontSize: '22px', fontWeight: 700, color: orangeAccent }}>{stats.open_tickets}</h3>
+              </div>
+              <div>
+                <span style={{ fontSize: '12px', color: '#AAA' }}>Resolved Tickets</span>
+                <h3 style={{ fontSize: '22px', fontWeight: 700, color: '#2E7D32' }}>{stats.resolved_tickets}</h3>
+              </div>
+              <div>
+                <span style={{ fontSize: '12px', color: '#AAA' }}>Resolution Rate</span>
+                <h3 style={{ fontSize: '22px', fontWeight: 700 }}>{stats.resolution_rate}%</h3>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* OUTAGE MANAGEMENT CARD */}
         {!isLoading && (
           <div style={{ background: whiteBg, padding: '24px', borderRadius: '16px', border: '0.5px solid #E8E8E8', marginBottom: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
@@ -192,7 +219,6 @@ export default function AdminDashboard() {
               <h2 style={{ fontSize: '18px', fontWeight: 600, color: darkBg }}>Outage Management</h2>
             </div>
             
-            {/* Create Outage Form */}
             <form onSubmit={handleCreateOutage} style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
               <input 
                 type="text" 
@@ -216,7 +242,6 @@ export default function AdminDashboard() {
               </button>
             </form>
 
-            {/* Existing Outages Responsive Grid Control Panel */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
               {outages.map(o => (
                 <div key={o.city} style={{ padding: '16px', borderRadius: '12px', background: '#F7F7F7', border: `0.5px solid ${o.is_active ? '#FFCDD2' : '#E8E8E8'}` }}>
@@ -305,12 +330,12 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* EXPANDED TRANSCRIPT VIEW */}
+                {/* EXPANDED VIEW */}
                 {expandedTicket === ticket.id && (
                   <div style={{ borderTop: '0.5px solid #E8E8E8', padding: '20px', background: '#FAFAFA' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
                       
-                      {/* Change Status Control Form Elements */}
+                      {/* Status controls */}
                       <div style={{ background: whiteBg, padding: '12px', borderRadius: '8px', border: '0.5px solid #E8E8E8' }}>
                         <label style={{ fontSize: '12px', color: lightGreyText, display: 'block', marginBottom: '4px' }}>Change Status</label>
                         <div style={{ display: 'flex', gap: '4px' }}>
@@ -325,7 +350,7 @@ export default function AdminDashboard() {
                         </div>
                       </div>
 
-                      {/* Reschedule Visit Control Form Elements */}
+                      {/* Scheduling controls */}
                       {ticket.technician && (
                         <div style={{ background: whiteBg, padding: '12px', borderRadius: '8px', border: '0.5px solid #E8E8E8' }}>
                           <label style={{ fontSize: '12px', color: lightGreyText, display: 'block', marginBottom: '4px' }}>Reassign / Reschedule</label>
@@ -354,9 +379,14 @@ export default function AdminDashboard() {
                       {ticket.transcript}
                     </pre>
 
-                    {/* Delete Ticket Context Button */}
-                    <div style={{ marginTop: '20px', textAlign: 'right' }}>
-                      <button onClick={() => handleDeleteTicket(ticket.id)} style={{ padding: '8px 16px', background: whiteBg, color: '#D32F2F', border: '1px solid #D32F2F', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>Delete Ticket</button>
+                    {/* 5. Cleaned Bottom Action Container (Chat layout cleanly replaced by standalone Archive layout) */}
+                    <div style={{ marginTop: '20px', borderTop: '0.5px solid #E8E8E8', paddingTop: '20px', textAlign: 'right' }}>
+                      <button 
+                        onClick={() => handleArchiveTicket(ticket.id)}
+                        style={{ padding: '8px 16px', background: '#fff', color: '#555', border: '1px solid #E0E0E0', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}
+                      >
+                        Archive Ticket
+                      </button>
                     </div>
                   </div>
                 )}
