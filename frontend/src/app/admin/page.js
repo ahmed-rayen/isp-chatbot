@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
@@ -11,6 +11,7 @@ import {
   IconChevronUp, 
   IconAlertTriangle 
 } from '@tabler/icons-react';
+import { apiFetch } from '../lib/api';
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -22,7 +23,7 @@ export default function AdminDashboard() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [technicians, setTechnicians] = useState([]);
 
-  // 1. Stats state initialization
+  // Stats state initialization
   const [stats, setStats] = useState({ 
     total_tickets: 0, 
     resolved_tickets: 0, 
@@ -36,52 +37,59 @@ export default function AdminDashboard() {
 
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
+  // Consolidated handler to hydrate the UI safely post-authentication
+  const fetchAdminData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const [ticketsRes, outagesRes, chunksRes, statsRes, techsRes] = await Promise.all([
+        apiFetch(`${API_BASE}/admin/tickets`),
+        apiFetch(`${API_BASE}/admin/outages`),
+        apiFetch(`${API_BASE}/admin/flagged-chunks`),
+        apiFetch(`${API_BASE}/admin/stats`),
+        apiFetch(`${API_BASE}/admin/technicians`)
+      ]);
+
+      if (ticketsRes.ok) setTickets(await ticketsRes.json());
+      if (outagesRes.ok) setOutages(await outagesRes.json());
+      if (chunksRes.ok) setFlaggedChunks(await chunksRes.json());
+      if (statsRes.ok) setStats(await statsRes.json());
+      if (techsRes.ok) setTechnicians(await techsRes.json());
+    } catch (e) {
+      console.error("Failed to fetch dashboard resource data", e);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [API_BASE]);
+
+  // CRIT-004 FIX: Verify admin status from server, not sessionStorage
   useEffect(() => {
     const token = sessionStorage.getItem('access_token');
-    const adminFlag = sessionStorage.getItem('is_admin') === 'true';
-    
     if (!token) { router.push('/login'); return; }
-    if (!adminFlag) { router.push('/'); return; }
     
-    setIsAdmin(true);
-    
-    const fetchAdminData = async () => {
+    const verifyAdmin = async () => {
       try {
-        const headers = { 'Authorization': `Bearer ${token}` };
+        const res = await apiFetch(`${API_BASE}/auth/me`);
+        if (!res.ok) { router.push('/login'); return; }
+        const user = await res.json();
+        if (!user.is_admin) { router.push('/'); return; }
         
-        // 2. Fetch stats integrated into Promise.all setup
-        const [ticketsRes, techsRes, outagesRes, flaggedRes, statsRes] = await Promise.all([
-          fetch(`${API_BASE}/admin/tickets`, { headers }),
-          fetch(`${API_BASE}/admin/technicians`, { headers }),
-          fetch(`${API_BASE}/admin/outages`, { headers }),
-          fetch(`${API_BASE}/admin/flagged-chunks`, { headers }),
-          fetch(`${API_BASE}/admin/stats`, { headers })
-        ]);
-
-        if (ticketsRes.status === 401 || ticketsRes.status === 403) { router.push('/login'); return; }
-        
-        setTickets(await ticketsRes.json());
-        setTechnicians(await techsRes.json());
-        setOutages(await outagesRes.json());
-        if (flaggedRes.ok) setFlaggedChunks(await flaggedRes.json());
-        if (statsRes.ok) setStats(await statsRes.json());
-      } catch (e) { 
-        console.error("Failed to load admin data:", e); 
-      } finally { 
-        setIsLoading(false); 
+        setIsAdmin(true);
+        fetchAdminData();
+      } catch (e) {
+        router.push('/login');
       }
     };
-    
-    fetchAdminData();
-  }, [router, API_BASE]);
+    verifyAdmin();
+  }, [router, API_BASE, fetchAdminData]);
 
   const handleReviewChunk = async (id) => {
     try {
-      await fetch(`${API_BASE}/admin/flagged-chunks/${id}/review`, {
-        method: 'PATCH',
-        headers: { 'Authorization': `Bearer ${sessionStorage.getItem('access_token')}` }
+      const res = await apiFetch(`${API_BASE}/admin/flagged-chunks/${id}/review`, {
+        method: 'PATCH'
       });
-      setFlaggedChunks(prev => prev.filter(c => c.id !== id));
+      if (res.ok) {
+        setFlaggedChunks(prev => prev.filter(c => c.id !== id));
+      }
     } catch (e) {
       console.error("Failed to mark chunk as reviewed:", e);
     }
@@ -89,36 +97,38 @@ export default function AdminDashboard() {
 
   const handleUpdateStatus = async (ticketId, newStatus) => {
     try {
-      await fetch(`${API_BASE}/admin/tickets/${ticketId}`, {
+      const res = await apiFetch(`${API_BASE}/admin/tickets/${ticketId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('access_token')}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })
       });
-      setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, status: newStatus } : t));
+      if (res.ok) {
+        setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, status: newStatus } : t));
+      }
     } catch (e) { console.error("Failed to update status"); }
   };
 
   const handleReschedule = async (ticketId, date, slot, techId) => {
     try {
-      await fetch(`${API_BASE}/admin/visits/${ticketId}`, {
+      const res = await apiFetch(`${API_BASE}/admin/visits/${ticketId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('access_token')}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ scheduled_date: date, time_slot: slot, technician_id: techId })
       });
-      alert("Visit updated!");
+      if (res.ok) alert("Visit updated!");
     } catch (e) { console.error("Failed to update visit"); }
   };
 
-  // 3. Updated handleArchiveTicket using reliable standard fetch routing
   const handleArchiveTicket = async (ticketId) => {
     if (!confirm("Archive this ticket? It will be hidden from the active list.")) return;
     try {
-      await fetch(`${API_BASE}/admin/tickets/${ticketId}/archive`, { 
-        method: 'PATCH',
-        headers: { 'Authorization': `Bearer ${sessionStorage.getItem('access_token')}` }
+      const res = await apiFetch(`${API_BASE}/admin/tickets/${ticketId}/archive`, { 
+        method: 'PATCH'
       });
-      setTickets(prev => prev.filter(t => t.id !== ticketId)); 
-      setExpandedTicket(null);
+      if (res.ok) {
+        setTickets(prev => prev.filter(t => t.id !== ticketId)); 
+        setExpandedTicket(null);
+      }
     } catch (e) { console.error("Failed to archive"); }
   };
 
@@ -126,40 +136,42 @@ export default function AdminDashboard() {
     e.preventDefault();
     if (!newOutageCity || !newOutageStatus) return;
     try {
-      await fetch(`${API_BASE}/admin/outages`, {
+      const createRes = await apiFetch(`${API_BASE}/admin/outages`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('access_token')}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ city: newOutageCity, status: newOutageStatus })
       });
       
-      const res = await fetch(`${API_BASE}/admin/outages`, { 
-        headers: { 'Authorization': `Bearer ${sessionStorage.getItem('access_token')}` } 
-      });
-      setOutages(await res.json());
-      setNewOutageCity('');
-      setNewOutageStatus('');
+      if (createRes.ok) {
+        const res = await apiFetch(`${API_BASE}/admin/outages`);
+        if (res.ok) setOutages(await res.json());
+        setNewOutageCity('');
+        setNewOutageStatus('');
+      }
     } catch (e) { console.error("Failed to create outage"); }
   };
 
   const handleToggleOutage = async (city) => {
     try {
-      const res = await fetch(`${API_BASE}/admin/outages/${city}`, {
-        method: 'PATCH',
-        headers: { 'Authorization': `Bearer ${sessionStorage.getItem('access_token')}` }
+      const res = await apiFetch(`${API_BASE}/admin/outages/${city}`, {
+        method: 'PATCH'
       });
-      const data = await res.json();
-      setOutages(prev => prev.map(o => o.city === city ? { ...o, is_active: data.is_active } : o));
+      if (res.ok) {
+        const data = await res.json();
+        setOutages(prev => prev.map(o => o.city === city ? { ...o, is_active: data.is_active } : o));
+      }
     } catch (e) { console.error("Failed to toggle outage"); }
   };
 
   const handleDeleteOutage = async (city) => {
     if (!confirm(`Permanently delete outage for ${city}?`)) return;
     try {
-      await fetch(`${API_BASE}/admin/outages/${city}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${sessionStorage.getItem('access_token')}` }
+      const res = await apiFetch(`${API_BASE}/admin/outages/${city}`, {
+        method: 'DELETE'
       });
-      setOutages(prev => prev.filter(o => o.city !== city));
+      if (res.ok) {
+        setOutages(prev => prev.filter(o => o.city !== city));
+      }
     } catch (e) { console.error("Failed to delete outage"); }
   };
 
@@ -186,7 +198,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* 4. MONTHLY STATISTICS REPORT CARD */}
+        {/* MONTHLY STATISTICS REPORT CARD */}
         {!isLoading && (
           <div style={{ background: darkBg, padding: '24px', borderRadius: '16px', marginBottom: '24px', color: '#fff' }}>
             <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px' }}>Monthly Statistics Report</h2>
@@ -379,7 +391,7 @@ export default function AdminDashboard() {
                       {ticket.transcript}
                     </pre>
 
-                    {/* 5. Cleaned Bottom Action Container (Chat layout cleanly replaced by standalone Archive layout) */}
+                    {/* Cleaned Bottom Action Container */}
                     <div style={{ marginTop: '20px', borderTop: '0.5px solid #E8E8E8', paddingTop: '20px', textAlign: 'right' }}>
                       <button 
                         onClick={() => handleArchiveTicket(ticket.id)}

@@ -11,9 +11,10 @@ import hashlib
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-SECRET_KEY = "YOUR_SUPER_SECRET_KEY_CHANGE_THIS_LATER"
+# CRIT-001 FIX: Use secret from environment
+SECRET_KEY = settings.jwt_secret
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 15  # FIX: Shortened to 15 minutes
+ACCESS_TOKEN_EXPIRE_MINUTES = 15
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
@@ -34,15 +35,37 @@ def decode_access_token(token: str):
     except JWTError:
         return None
 
-# NEW: Create refresh token, store its hash in DB
 def create_refresh_token(db: Session, user_id) -> str:
     raw_token = secrets.token_urlsafe(64)
     token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
-    
     db.add(RefreshToken(
         user_id=user_id,
         token_hash=token_hash,
         expires_at=datetime.utcnow() + timedelta(days=7)
     ))
     db.commit()
-    return raw_token  # return raw, send to client once, never store raw
+    return raw_token
+
+# LOW-003 FIX: Token rotation on refresh
+def rotate_refresh_token(db: Session, old_token_hash: str) -> str:
+    record = db.query(RefreshToken).filter(
+        RefreshToken.token_hash == old_token_hash,
+        RefreshToken.revoked == False,
+        RefreshToken.expires_at > datetime.utcnow()
+    ).first()
+    if not record:
+        return None
+    
+    # Revoke old token
+    record.revoked = True
+    
+    # Issue new refresh token
+    raw_token = secrets.token_urlsafe(64)
+    new_token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    db.add(RefreshToken(
+        user_id=record.user_id,
+        token_hash=new_token_hash,
+        expires_at=datetime.utcnow() + timedelta(days=7)
+    ))
+    db.commit()
+    return raw_token

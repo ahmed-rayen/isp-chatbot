@@ -3,9 +3,10 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.database import SessionLocal
 from app.models.db_models import User
 from jose import jwt
-import json
+from app.config import settings
 
-SECRET_KEY = "YOUR_SUPER_SECRET_KEY_CHANGE_THIS_LATER"
+# CRIT-001 FIX: Use secret from environment
+SECRET_KEY = settings.jwt_secret
 ALGORITHM = "HS256"
 
 class AttachUserMiddleware(BaseHTTPMiddleware):

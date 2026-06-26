@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { IconTools } from '@tabler/icons-react';
 import ReactMarkdown from 'react-markdown';
+import rehypeSanitize from 'rehype-sanitize';
 import { 
   IconWifi, 
   IconPlus, 
@@ -377,7 +378,7 @@ export default function ChatPage() {
               </div>
               <div>
                 <div className={`bubble ${msg.role === 'user' ? 'user-bubble' : 'bot-bubble'}`}>
-                  {msg.role === 'user' ? ( msg.content ) : ( <ReactMarkdown>{msg.content}</ReactMarkdown> )}
+                  {msg.role === 'user' ? ( msg.content ) : (<ReactMarkdown rehypePlugins={[rehypeSanitize]}>{msg.content}</ReactMarkdown> )}
                 </div>
                 {index === 0 && msg.role === 'assistant' && sessionId === null && (
                   <div className="quick-chips">

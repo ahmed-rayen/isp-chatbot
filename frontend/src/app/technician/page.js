@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
@@ -30,30 +30,46 @@ export default function TechnicianDashboard() {
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
   const WS_BASE = API_BASE.replace('http', 'ws').replace('/api', ''); // e.g., ws://localhost:8000
 
+  // Extracted core data hydration logic to prevent stale state issues
+  const fetchData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const [tRes, sRes] = await Promise.all([
+        apiFetch(`${API_BASE}/technician/tickets`),
+        apiFetch(`${API_BASE}/technician/stats`)
+      ]);
+      
+      if (tRes.ok) setTickets(await tRes.json());
+      if (sRes.ok) setStats(await sRes.json());
+    } catch (e) { 
+      console.error("Failed to load tech data", e); 
+    } finally { 
+      setIsLoading(false); 
+    }
+  }, [API_BASE]);
+
+  // CRIT-004 FIX: Verify technician privileges directly from server payload
   useEffect(() => {
     const token = sessionStorage.getItem('access_token');
-    const techFlag = sessionStorage.getItem('is_technician') === 'true';
-    
     if (!token) { router.push('/login'); return; }
-    if (!techFlag) { router.push('/'); return; }
     
-    setIsTech(true);
-    
-    const fetchData = async () => {
+    const verifyTechnician = async () => {
       try {
-        const [tRes, sRes] = await Promise.all([
-          apiFetch(`${API_BASE}/technician/tickets`),
-          apiFetch(`${API_BASE}/technician/stats`)
-        ]);
+        const res = await apiFetch(`${API_BASE}/auth/me`);
+        if (!res.ok) { router.push('/login'); return; }
         
-        if (tRes.ok) setTickets(await tRes.json());
-        if (sRes.ok) setStats(await sRes.json());
-      } catch (e) { console.error("Failed to load tech data"); }
-      finally { setIsLoading(false); }
+        const user = await res.json();
+        if (!user.is_technician) { router.push('/'); return; }
+        
+        setIsTech(true);
+        fetchData();
+      } catch (e) {
+        router.push('/login');
+      }
     };
-    
-    fetchData();
-  }, [router, API_BASE]);
+
+    verifyTechnician();
+  }, [router, API_BASE, fetchData]);
 
   // WEBSOCKET LOGIC: Connect when ticket expanded, disconnect when collapsed
   useEffect(() => {

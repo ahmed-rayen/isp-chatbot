@@ -70,7 +70,7 @@ class Ticket(Base):
     status = Column(String(20), default="open")
     is_deleted = Column(Boolean, default=False) # NEW: Soft delete for admin
     created_at = Column(DateTime, default=datetime.utcnow)
-    created_at = Column(DateTime, default=datetime.utcnow)
+   
 
 class TicketComment(Base):
     __tablename__ = "ticket_comments" # NEW TABLE

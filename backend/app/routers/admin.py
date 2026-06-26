@@ -6,6 +6,8 @@ from app.models.db_models import User, Ticket, TechnicianVisit, Technician, Outa
 from app.routers.auth import get_current_user
 from datetime import date
 from sqlalchemy import func
+from app.logger import logger # <-- ADD THIS
+
 
 router = APIRouter()
 
@@ -98,17 +100,17 @@ def update_visit(ticket_id: str, payload: VisitUpdate, db: Session = Depends(get
     if not visit:
         raise HTTPException(status_code=404, detail="Visit not found")
     
-    # Update fields
     try:
         visit.scheduled_date = date.fromisoformat(payload.scheduled_date)
-    except:
-        pass # Ignore bad date format
+    except Exception as e:
+        logger.error(f"Admin error: {e}")
+        raise HTTPException(status_code=500, detail="An internal error occurred.")
     
     visit.time_slot = payload.time_slot
     visit.technician_id = payload.technician_id
-    
     db.commit()
     return {"status": "updated", "ticket_id": ticket_id}
+
 @router.get("/technicians")
 def get_technicians(db: Session = Depends(get_db), admin: User = Depends(admin_required)):
     techs = db.query(Technician).all()

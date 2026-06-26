@@ -59,7 +59,8 @@ async def chat_endpoint(request: Request, payload: ChatRequest, db: Session = De
         return ChatResponse(session_id=session_id, reply=ai_reply)
     except Exception as e:
         logger.error(f"Endpoint Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # HIGH-002 FIX: Generic error message
+        raise HTTPException(status_code=500, detail="An internal error occurred.")
 
 @router.get("/sessions")
 def get_sessions(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -68,12 +69,28 @@ def get_sessions(db: Session = Depends(get_db), current_user: User = Depends(get
 
 @router.get("/sessions/{session_id}/messages")
 def get_session_messages(session_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    # HIGH-009 FIX: Verify session belongs to current user
+    session = db.query(ChatSession).filter(
+        ChatSession.id == uuid.UUID(session_id),
+        ChatSession.user_id == current_user.id  # Ownership check
+    ).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
     msgs = db.query(Message).filter(Message.session_id == uuid.UUID(session_id)).order_by(Message.created_at).all()
     return [{"role": m.role, "content": m.content} for m in msgs]
 
 @router.post("/sessions/{session_id}/summarize")
 async def summarize_session(session_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     try:
+        # HIGH-009 FIX: Verify session belongs to current user
+        session = db.query(ChatSession).filter(
+            ChatSession.id == uuid.UUID(session_id),
+            ChatSession.user_id == current_user.id  # Ownership check
+        ).first()
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
         history = get_full_history(db, session_id)
         if len(history) < 2: return {"status": "skipped", "message": "Not enough messages to summarize."}
         from app.services.nvidia_client import generate_session_summary
@@ -82,10 +99,13 @@ async def summarize_session(session_id: str, db: Session = Depends(get_db), curr
         db.add(new_summary)
         db.commit()
         return {"status": "summarized", "summary": summary_text}
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"Summarize Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+        # HIGH-002 FIX: Generic error, don't expose internal details
+        logger.error(f"Summarize Error: {e}")
+        raise HTTPException(status_code=500, detail="An internal error occurred.")
+    
 @router.delete("/sessions/{session_id}")
 def delete_session(session_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     try:
