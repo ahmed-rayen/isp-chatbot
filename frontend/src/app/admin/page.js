@@ -11,7 +11,7 @@ import {
   IconChevronUp, 
   IconAlertTriangle 
 } from '@tabler/icons-react';
-import { apiFetch } from '../lib/api';
+import { apiFetch } from '../../lib/api';
 
 export default function AdminDashboard() {
   const router = useRouter();

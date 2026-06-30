@@ -12,7 +12,7 @@ import {
   IconChevronUp, 
   IconSend 
 } from '@tabler/icons-react';
-import { apiFetch } from '../lib/api';
+import { apiFetch } from '../../lib/api';
 
 export default function TechnicianDashboard() {
   const router = useRouter();

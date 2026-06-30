@@ -1,7 +1,7 @@
 # backend/evaluations/eval_tool_routing.py
 import json
 from app.config import settings
-from app.services.tools import TOOL_DEFINITIONS
+from backend.app.services.tool_functions import TOOL_DEFINITIONS
 from openai import OpenAI
 
 # Initialize client directly for testing

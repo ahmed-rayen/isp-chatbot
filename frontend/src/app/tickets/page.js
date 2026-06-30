@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { IconWifi, IconArrowLeft, IconClock, IconUser, IconSend } from '@tabler/icons-react';
-import { apiFetch } from '../lib/api';
+import { apiFetch } from '../../lib/api';
 
 export default function TicketsPage() {
   const router = useRouter();
