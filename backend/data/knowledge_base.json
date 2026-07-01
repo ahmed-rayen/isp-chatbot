@@ -1,37 +1,86 @@
 [
   {
-    "topic": "router_reset",
-    "tags": ["router", "reset", "reboot", "restart", "not working", "slow"],
-    "content": "How to properly reset your Oassis Router:\n1. Locate the red reset button inside the pinhole on the back.\n2. Use a paperclip to press and hold it for 10 seconds.\n3. Release when the 'SYS' light turns red.\n4. Wait 3 minutes for the router to fully boot. Do not unplug the power during this time."
+    "topic": "Router Reboot vs Reset",
+    "tags": ["router", "reset", "reboot", "restart", "not working", "slow", "راوتر", "اعادة تشغيل", "routeur", "redémarrer"],
+    "category": "technical",
+    "content": "How to properly reboot or reset your Oassis Router:\n1. Simple Reboot (Fixes 80% of slow speeds): Unplug the power cable from the back of the router, wait 30 seconds, and plug it back in. Wait 3 minutes for the lights to stabilize.\n2. Full Factory Reset (ONLY if reboot fails or you forgot your password): Locate the red reset button inside the pinhole on the back. Use a paperclip to press and hold it for 10 seconds. Release when the 'SYS' light turns red. Wait 3 minutes. Note: This will erase your custom Wi-Fi name and password."
   },
   {
-    "topic": "router_lights_guide",
-    "tags": ["lights", "led", "sys", "pon", "los", "red light", "green light"],
-    "content": "Router Light Status Guide:\n- PON (Green): Good. Fiber connection is established.\n- PON (Blinking Green): Trying to connect. Wait 2 minutes.\n- LOS (Red): Critical. Fiber cable is disconnected or broken. Check the thin green/white cable. Do not bend it sharply.\n- SYS (Green): System operating normally.\n- WLAN (Green): Wi-Fi is active."
+    "topic": "Router Lights Status Guide",
+    "tags": ["lights", "led", "sys", "pon", "los", "red light", "green light", "ضوء", "احمر", "اخضر", "lumière", "rouge", "vert"],
+    "category": "technical",
+    "content": "Router Light Status Guide:\n- PON (Solid Green): Good. Fiber connection is established.\n- PON (Blinking Green): Trying to connect to the ISP. Wait 2-3 minutes.\n- LOS (Red): CRITICAL. Fiber cable is disconnected, broken, or bent. Check the thin green/white cable. If it is visibly damaged, a technician must replace it.\n- SYS (Green): System operating normally.\n- LOS + PON (Both Off): The router is not receiving power or is completely dead."
   },
   {
-    "topic": "dns_configuration",
-    "tags": ["dns", "internet", "not working", "configure", "windows", "mac"],
-    "content": "To configure DNS on Windows:\n1. Control Panel > Network and Internet > Network and Sharing Center.\n2. Click 'Change adapter settings'.\n3. Right-click connection -> 'Properties'.\n4. Select 'Internet Protocol Version 4 (TCP/IPv4)' -> 'Properties'.\n5. Choose 'Use the following DNS server addresses': Primary 8.8.8.8, Secondary 8.8.4.4."
+    "topic": "No Internet on One Device vs All Devices",
+    "tags": ["one device", "all devices", "wifi", "no internet", "phone", "laptop", "جهاز واحد", "كل الاجهزة", "pas internet", "un appareil"],
+    "category": "technical",
+    "content": "Troubleshooting Isolation Steps:\n1. If ONLY your phone has no internet: Go to phone Wi-Fi settings, 'Forget' the network, and reconnect by entering the password manually.\n2. If ONLY your PC has no internet: Check if it is connected via Wi-Fi or Ethernet cable. Try disabling and re-enabling the network adapter.\n3. If ALL devices have no internet: The issue is with the router or the ISP line. Proceed to rebooting the router. If the LOS light is red, check the fiber cable."
   },
   {
-    "topic": "wifi_optimization",
-    "tags": ["wifi", "wi-fi", "slow", "signal", "weak", "drops", "disconnect"],
-    "content": "Wi-Fi Optimization Tips:\n1. Placement: Keep the router in an open, elevated area (not on the floor or inside a cabinet).\n2. Interference: Keep away from microwaves, cordless phones, and large metal objects.\n3. Band: Connect heavy devices (TVs, PCs) to the 5GHz network. Use 2.4GHz for smart home devices.\n4. Channel: Use the Oassis app to scan for the least congested Wi-Fi channel."
+    "topic": "Forgot WiFi Password",
+    "tags": ["forgot password", "wifi password", "change password", "network key", "نسيت كلمة السر", "رمز واي فاي", "mot de passe", "oublié"],
+    "category": "technical",
+    "content": "How to find or change your Wi-Fi password:\n1. Check the sticker on the back or bottom of the router. The default Wi-Fi name (SSID) and password (WPA key) are printed there.\n2. If you changed it and forgot it, you must do a Factory Reset (press the reset pinhole for 10 seconds). This will reset the password back to the one on the sticker.\n3. Once logged in, we strongly recommend changing the password via the router admin page at 192.168.1.1."
   },
   {
-    "topic": "fiber_cable_care",
-    "tags": ["fiber", "cable", "broken", "cut", "los", "red"],
-    "content": "Fiber Optic Cable Care:\nThe fiber cable is extremely fragile. Never bend it at a 90-degree angle, never staple it to the wall, and never pull it forcefully. If the cable is bent, the internet will drop entirely (LOS light will turn red). If broken, a technician must be dispatched."
+    "topic": "PPPoE or Authentication Error",
+    "tags": ["pppoe", "authentication", "error", "login failed", "disconnecting", "خطا", "مصادقة", "authentification", "erreur"],
+    "category": "technical",
+    "content": "PPPoE Authentication Error (Usually means account suspension or cable issue):\n1. This error means the router cannot verify your account with our servers.\n2. First, check if your LOS light is red. If yes, it's a physical cable issue, not an account issue.\n3. If lights are green, this usually means your account is suspended due to an unpaid bill. Check your balance.\n4. Restart the router. If the error persists for more than 15 minutes, contact support."
   },
   {
-    "topic": "billing_and_plans",
-    "tags": ["plan", "speed", "price", "billing", "fiber", "mbps", "invoice", "pay"],
-    "content": "Oassis Telecom Fiber Plans & Billing:\n1. Fiber 100: 100 Mbps for 99 TND/month.\n2. Fiber 500: 500 Mbps for 199 TND/month.\n3. Fiber 1Giga: 1000 Mbps for 299 TND/month.\nAll plans include free installation, a Wi-Fi 6 router, and a static IP. Invoices are generated on the 1st of every month and can be paid via the Oassis App, e-Dinar, or bank transfer."
+    "topic": "DNS Configuration",
+    "tags": ["dns", "internet", "not working", "configure", "windows", "mac", "dns", "ويندوز", "fenêtre"],
+    "category": "technical",
+    "content": "To configure DNS on Windows (Fixes 'Connected but no internet' issues):\n1. Open Control Panel > Network and Internet > Network and Sharing Center.\n2. Click 'Change adapter settings' on the left.\n3. Right-click your active connection -> 'Properties'.\n4. Select 'Internet Protocol Version 4 (TCP/IPv4)' -> 'Properties'.\n5. Choose 'Use the following DNS server addresses': Set Primary to 8.8.8.8 and Secondary to 1.1.1.1. Click OK."
   },
   {
-    "topic": "speed_test_guide",
-    "tags": ["speed", "test", "slow", "mbps", "fast", "benchmark"],
-    "content": "How to accurately test your internet speed:\n1. Stand next to the router (to eliminate Wi-Fi interference).\n2. Connect your laptop directly to the router via an Ethernet cable.\n3. Close all background apps (torrents, updates, Netflix).\n4. Go to speedtest.net and run the test. If it shows 90%+ of your plan speed, the connection is perfect."
+    "topic": "Wi-Fi Optimization and Interference",
+    "tags": ["wifi", "slow", "signal", "weak", "drops", "disconnect", "range", "بطيء", "ضعيف", "lent", "faible"],
+    "category": "technical",
+    "content": "Wi-Fi Optimization Tips:\n1. Placement: Keep the router in an open, elevated area. Never put it on the floor, behind a TV, or inside a closed cabinet.\n2. Interference: Keep the router away from microwaves, Bluetooth devices, and thick concrete walls.\n3. 5GHz vs 2.4GHz: Use 5GHz for high speed in the same room. Use 2.4GHz if you are far away or behind walls, as it penetrates obstacles better but is slower."
+  },
+  {
+    "topic": "Fiber Optic Cable Care",
+    "tags": ["fiber", "cable", "broken", "cut", "los", "red", "كابل", "الياف", "coupé", "fibre"],
+    "category": "technical",
+    "content": "Fiber Optic Cable Care:\nThe fiber cable is extremely fragile. Never bend it at a sharp angle (under 30mm radius), never staple it to the wall, and never step on it. If the cable is bent or crushed, the internet will drop entirely and the LOS light will turn red. If the cable is visibly broken or cut, do not try to tape it together—it requires a special splice. A technician must be dispatched to replace it."
+  },
+  {
+    "topic": "Accurate Speed Test Guide",
+    "tags": ["speed", "test", "slow", "mbps", "fast", "benchmark", "سرعة", "اختبار", "vitesse", "test"],
+    "category": "technical",
+    "content": "How to accurately test your internet speed:\n1. Do NOT test over Wi-Fi if you suspect low speeds. Connect your laptop directly to the router using an Ethernet cable.\n2. Close all background downloads, torrents, and streaming apps (Netflix, YouTube) on ALL devices in the house.\n3. Go to speedtest.net or speedtest.tn and run the test.\n4. If the result is above 85% of your plan speed (e.g., 85 Mbps on a 100 Mbps plan), your line is healthy. If it is much lower, contact support."
+  },
+  {
+    "topic": "Payment Methods",
+    "tags": ["payment", "pay", "bill", "flouci", "bank", "post office", "dinar", "tnd", "دفع", "فاتورة", "بريد", "paiement", "facture", "la poste"],
+    "category": "billing",
+    "content": "We offer several convenient ways to pay your internet bill:\n1. Bank Transfer: Transfer the exact amount to our IBAN (TN1234567890123456789012) using your account number as the reference.\n2. Flouci: Send the payment via the Flouci app to our official merchant number.\n3. Post Office: Pay in cash at any Tunisian post office counter by providing your account number (e.g., 4821).\n4. E-Dinar: Use your e-Dinar card at any approved electronic payment point."
+  },
+  {
+    "topic": "Internet Plans and Pricing",
+    "tags": ["price", "plan", "cost", "mbps", "speed", "subscription", "offer", "اسعار", "انترنت", "prix", "abonnement", "offre"],
+    "category": "billing",
+    "content": "Our current available internet plans are:\n1. Fiber 100: 100 Mbps download/upload - 29.9 TND/month.\n2. Fiber 500: 500 Mbps download/upload - 49.9 TND/month.\n3. Fiber 1Giga: 1 Gbps download/upload - 79.9 TND/month.\nAll plans include free router rental, no installation fees for new subscribers, and unlimited data."
+  },
+  {
+    "topic": "Late Payment Policy and Suspension",
+    "tags": ["late", "fee", "penalty", "overdue", "cut", "suspended", "due date", "تاخر", "غرامة", "قطع", "retard", "coupure", "suspension"],
+    "category": "billing",
+    "content": "Late Payment Policy:\n1. A grace period of 5 days is allowed after the due date without penalty.\n2. After 5 days, a late fee of 2 TND will be applied to your next bill.\n3. If the bill remains unpaid for 15 days past the due date, your internet service will be temporarily suspended until the balance is cleared.\n4. To reactivate, simply pay the overdue balance plus any applicable late fees. Service usually resumes automatically within 2 hours of payment confirmation."
+  },
+  {
+    "topic": "Upgrading or Changing Your Plan",
+    "tags": ["upgrade", "change plan", "downgrade", "switch", "increase speed", "ترقية", "تغيير", "changer", "améliorer"],
+    "category": "billing",
+    "content": "To upgrade or change your internet plan:\n1. You can request a plan change by asking me to create a support ticket for 'Plan Upgrade'.\n2. Upgrades take effect within 24 hours. Downgrades take effect at the start of your next billing cycle.\n3. The price difference will be prorated on your next invoice if you upgrade mid-cycle.\n4. There are no hidden fees for changing your plan."
+  },
+  {
+    "topic": "Invoice Disputes and Refunds",
+    "tags": ["wrong bill", "overcharged", "double charge", "invoice", "refund", "dispute", "خطا في الفاتورة", "استرجاع", "facture", "remboursement", "surfacturation"],
+    "category": "billing",
+    "content": "If you believe there is an error on your bill (e.g., double charge, wrong amount):\n1. Do not pay the disputed amount yet if you suspect an error.\n2. Ask me to create a billing support ticket. Provide the amount you were charged and why you think it is wrong.\n3. Our billing department will review your account usage logs and issue a correction or refund within 3-5 business days if an error is confirmed."
   }
 ]

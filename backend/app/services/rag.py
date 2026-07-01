@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import uuid
 from dataclasses import dataclass, field
 
@@ -19,16 +20,14 @@ RERANKER_MODEL = "baai/bge-reranker-v2-m3"
 RERANKER_URL = "https://integrate.api.nvidia.com/v1/ranking"
 
 RRF_K = 60
-VECTOR_TOP_K = 5
-BM25_TOP_K = 5
-RERANK_TOP_K = 3
+VECTOR_TOP_K = 10       # Increased: Get more candidates for the fusion
+BM25_TOP_K = 10         # Increased: Get more candidates for the fusion
+RERANK_CANDIDATES = 10  # NEW: Send top 10 to the heavy cross-encoder
+RERANK_TOP_K = 3        # Final output chunks
 
-RRF_SCORE_THRESHOLD = 0.005
+RRF_SCORE_THRESHOLD = 0.003 # Lowered slightly to catch more edge cases
 RERANKER_LOGIT_THRESHOLD = -2.0
-CATEGORY_BOOST = 1.2
-MIN_CHUNK_LENGTH = 15
-
-BILLING_KEYWORDS = ["price", "plan", "bill", "invoice", "pay", "tnd", "mbps"]
+MIN_CHUNK_LENGTH = 20   # Increased to drop useless header-only chunks
 
 
 @dataclass
@@ -36,7 +35,6 @@ class RAGState:
     """Holds the in-memory RAG index."""
     chunks: list[dict] = field(default_factory=list)
     embeddings: list[list[float]] = field(default_factory=list)
-    categories: list[str] = field(default_factory=list)
     bm25: BM25Okapi | None = None
     is_initialized: bool = False
 
@@ -49,10 +47,36 @@ def cosine_similarity(vec1: list[float], vec2: list[float]) -> float:
     return float(np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2)))
 
 
-def classify_query(query: str) -> str:
-    if any(word in query.lower() for word in BILLING_KEYWORDS):
-        return "billing"
-    return "technical"
+def _smart_chunk_content(topic: str, content: str) -> list[str]:
+    """
+    Splits content logically by numbered lists or paragraphs, 
+    but prepends the topic to every chunk so it never loses context.
+    """
+    # Split by numbered items (e.g., "1. ", "2. ") or bullet points ("- ")
+    lines = re.split(r'(?=(?:\d+\.|\-))', content.strip())
+    
+    valid_lines = [line.strip() for line in lines if len(line.strip()) > 10]
+    
+    if not valid_lines:
+        return [f"{topic}: {content.strip()}"] if len(content.strip()) > MIN_CHUNK_LENGTH else []
+
+    chunks = []
+    current_chunk = f"{topic}: "
+    
+    for line in valid_lines:
+        # If adding this line makes the chunk too long, save it and start a new one
+        if len(current_chunk) + len(line) > 300 and len(current_chunk) > MIN_CHUNK_LENGTH:
+            chunks.append(current_chunk.strip())
+            # Start new chunk, KEEP the topic prefix for context!
+            current_chunk = f"{topic} (continued): "
+            
+        current_chunk += line + " "
+
+    # Add the remaining text
+    if len(current_chunk.strip()) > MIN_CHUNK_LENGTH:
+        chunks.append(current_chunk.strip())
+        
+    return chunks
 
 
 async def initialize_rag() -> None:
@@ -69,26 +93,31 @@ async def initialize_rag() -> None:
         bm25_corpus: list[list[str]] = []
 
         for item in kb_data:
-            for chunk in item["content"].split("\n"):
-                chunk = chunk.strip()
-                if len(chunk) <= MIN_CHUNK_LENGTH:
-                    continue
-
-                text_to_embed = f"{item['topic']} {' '.join(item['tags'])} {chunk}"
+            content = item["content"].strip()
+            topic = item["topic"]
+            tags = item.get("tags", [])
+            
+            # 1. Create smart chunks
+            text_chunks = _smart_chunk_content(topic, content)
+            
+            for chunk_text in text_chunks:
+                # EMBEDDINGS: Semantic meaning (Topic + Chunk)
                 vector = sync_client.embeddings.create(
-                    model=EMBEDDING_MODEL, input=text_to_embed, encoding_format="float"
+                    model=EMBEDDING_MODEL, input=chunk_text, encoding_format="float"
                 ).data[0].embedding
 
-                state.chunks.append({"text": chunk, "topic": item["topic"]})
+                state.chunks.append({"text": chunk_text, "topic": topic})
                 state.embeddings.append(vector)
-                state.categories.append(item.get("category", "general"))
-                bm25_corpus.append(text_to_embed.lower().split())
+
+                # BM25: Exact keyword matching (Topic + Tags + Chunk)
+                bm25_text = f"{topic} {' '.join(tags)} {chunk_text}"
+                bm25_corpus.append(bm25_text.lower().split())
 
         if bm25_corpus:
             state.bm25 = BM25Okapi(bm25_corpus)
 
         state.is_initialized = True
-        print(f"🧠 {len(state.chunks)} KB chunks embedded & BM25 indexed!")
+        print(f"🧠 {len(state.chunks)} smart KB chunks embedded & BM25 indexed!")
     except Exception as e:
         print(f"⚠️ Could not generate KB indices. RAG will be disabled. Error: {e}")
 
@@ -108,7 +137,7 @@ async def _rerank_chunks(query: str, chunks: list[str]) -> tuple[list[str], floa
                     "query": query,
                     "passages": [{"text": c} for c in chunks],
                 },
-                timeout=10.0,
+                timeout=15.0 # Slightly increased timeout for 10 chunks
             )
             response.raise_for_status()
             data = response.json()
@@ -134,28 +163,27 @@ async def search_knowledge_base(
     user_id: str | None = None,
     session_id: str | None = None,
 ) -> str:
-    """Hybrid search: vector + BM25 → RRF → cross-encoder reranking."""
+    """Hybrid search: vector + BM25 -> RRF -> cross-encoder reranking."""
     if not state.is_initialized:
         return "Knowledge base is not initialized."
 
     try:
         rrf_scores: dict[int, float] = {}
-        target_category = classify_query(query)
 
-        # 1. Vector search
+        # 1. Vector search (Semantic)
         response = await async_client.embeddings.create(
             model=EMBEDDING_MODEL, input=query, encoding_format="float"
         )
         query_vector = response.data[0].embedding
 
         vector_scores = [
-            (i, cosine_similarity(query_vector, vec) * (CATEGORY_BOOST if state.categories[i] == target_category else 1.0))
+            (i, cosine_similarity(query_vector, vec))
             for i, vec in enumerate(state.embeddings)
         ]
         vector_scores.sort(key=lambda x: x[1], reverse=True)
         top_vector_indices = [idx for idx, _ in vector_scores[:VECTOR_TOP_K]]
 
-        # 2. BM25 keyword search
+        # 2. BM25 keyword search (Exact matches)
         bm25_scores = state.bm25.get_scores(query.lower().split())
         top_bm25_indices = np.argsort(bm25_scores)[::-1][:BM25_TOP_K]
 
@@ -167,21 +195,20 @@ async def search_knowledge_base(
 
         sorted_rrf = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
 
-        # KB Miss: RRF score too low
         if not sorted_rrf or sorted_rrf[0][1] < RRF_SCORE_THRESHOLD:
             return _record_kb_miss(db, user_id, query)
 
-        top_candidate_indices = [idx for idx, _ in sorted_rrf[:5]]
+        # Get top 10 UNIQUE candidates for the reranker
+        top_candidate_indices = [idx for idx, _ in sorted_rrf[:RERANK_CANDIDATES]]
         candidate_chunks = [state.chunks[idx]["text"] for idx in top_candidate_indices]
-
-        # 4. Cross-encoder re-ranking
+        
+        # 4. Cross-encoder re-ranking (The heavy lifter)
         final_chunks, top_logit = await _rerank_chunks(query, candidate_chunks)
 
-        # KB Miss: Re-ranker logit too low
         if top_logit < RERANKER_LOGIT_THRESHOLD and top_logit != 0.0:
             return _record_kb_miss(db, user_id, query)
 
-        # Log KB hits for feedback loop
+        # Log KB hits
         if session_id and final_chunks:
             for chunk in final_chunks:
                 topic = next(
@@ -191,7 +218,16 @@ async def search_knowledge_base(
                 db.add(KBHit(session_id=uuid.UUID(session_id), chunk_text=chunk, topic=topic))
             db.commit()
 
-        return "\n".join(final_chunks)
+        # 5. STRUCTURED OUTPUT: Prevents LLM from hallucinating transitions
+        formatted_context = ""
+        for i, chunk in enumerate(final_chunks, 1):
+            # Strip the topic prefix from the text so the LLM just gets the pure answer
+            clean_text = re.sub(r"^.*?:\s*", "", chunk).strip()
+            if clean_text.startswith("(continued)"):
+                clean_text = clean_text.replace("(continued):", "").strip()
+            formatted_context += f"[{i}] {clean_text}\n\n"
+
+        return formatted_context.strip()
 
     except Exception as e:
         return f"Error during hybrid search: {str(e)}"

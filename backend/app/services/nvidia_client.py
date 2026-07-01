@@ -91,7 +91,7 @@ async def generate_session_summary(chat_history: list):
         response = await client.chat.completions.create(
             model=settings.nvidia_model,
             messages=messages,
-            temperature=0.1,
+            temperature=0.3,
             max_tokens=150
         )
         text = response.choices[0].message.content

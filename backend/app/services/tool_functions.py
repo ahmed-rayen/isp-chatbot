@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models.db_models import Outage, Technician, TechnicianVisit, Ticket, User
+from app.models.db_models import Outage, Technician, TechnicianVisit, Ticket, User, Payment
 
 
 def check_outage(db: Session, city: str) -> str:
@@ -141,3 +141,23 @@ def schedule_technician_visit(
         f"A technician ({chosen_tech.name}) has been scheduled for {visit_date.strftime('%A, %B %d')} ({time_slot}). Ticket ID: {ticket_id}.",
     )
     return f"Success! Ticket {ticket_id} created. A technician named {chosen_tech.name} is scheduled for {visit_date.strftime('%A, %B %d')} during the {time_slot}."
+def get_payment_history(db: Session, user_id: str) -> str:
+    
+    """Returns the last 5 payment transactions for the user."""
+    payments = (
+        db.query(Payment)
+        .filter(Payment.user_id == uuid.UUID(user_id))
+        .order_by(Payment.created_at.desc())
+        .limit(5)
+        .all()
+    )
+    
+    if not payments:
+        return "No payment history found for your account."
+        
+    history_str = "Here are your recent payments:\n"
+    for p in payments:
+        date_str = p.created_at.strftime("%Y-%m-%d")
+        history_str += f"- {date_str}: {p.amount} TND ({p.method}) - Status: {p.status}\n"
+        
+    return history_str.strip()

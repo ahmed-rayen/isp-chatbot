@@ -2,6 +2,7 @@
 Re-exports all models for backward compatibility.
 All existing imports like `from app.models.db_models import User, Ticket` continue to work.
 """
+from app.models.billing import Payment
 from app.models.user import User, RefreshToken
 from app.models.chat import ChatSession, Message, SessionSummary
 from app.models.support import (
@@ -30,4 +31,5 @@ __all__ = [
     "Notification",
     "KBHit",
     "KBMiss",
+    "Payment",
 ]

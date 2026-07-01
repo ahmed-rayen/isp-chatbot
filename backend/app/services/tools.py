@@ -8,6 +8,7 @@ from app.services.tool_functions import (
     get_ticket_status,
     run_remote_diagnostics,
     schedule_technician_visit,
+    get_payment_history,
 )
 
 TOOL_DEFINITIONS = [
@@ -75,6 +76,14 @@ TOOL_DEFINITIONS = [
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
+        {
+        "type": "function",
+        "function": {
+            "name": "get_payment_history",
+            "description": "Look up the user's recent payment transactions to check if a payment went through or view past billing activity.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
 ]
 
 
@@ -104,6 +113,7 @@ async def execute_tool(
         "get_account_status": lambda: get_account_status(db=db, user_id=user_id),
         "get_ticket_status": lambda: get_ticket_status(db=db, ticket_id=arguments.get("ticket_id", "")),
         "run_remote_diagnostics": lambda: run_remote_diagnostics(session_id=session_id),
+        "get_payment_history": lambda: get_payment_history(db=db, user_id=user_id), 
     }
 
     handler = dispatch.get(tool_name)
